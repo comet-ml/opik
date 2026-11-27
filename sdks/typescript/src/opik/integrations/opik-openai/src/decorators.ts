@@ -25,7 +25,7 @@ const handleError = (
   rootTracer.span({
     ...observationData,
     endTime: new Date(),
-    type: OpikSpanType.General,
+    type: OpikSpanType.Llm,
     errorInfo: {
       message: error.message,
       exceptionType: error.name,
@@ -126,7 +126,7 @@ const wrapMethod = <T extends GenericMethod>(
             endTime: new Date(),
             usage,
             model: modelFromResponse || observationData.model,
-            type: OpikSpanType.General,
+            type: OpikSpanType.Llm,
             metadata: latestMetadata,
           });
 
@@ -258,7 +258,7 @@ function wrapAsyncIterable<T>(
       ...observationData,
       output: finalOutput,
       endTime: new Date(),
-      type: OpikSpanType.General,
+      type: OpikSpanType.Llm,
       usage: usageData,
     });
 

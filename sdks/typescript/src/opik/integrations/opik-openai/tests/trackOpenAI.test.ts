@@ -119,6 +119,7 @@ describe("trackOpenAI streaming", () => {
     expect(received).toHaveLength(5);
     expect(parent.span).toHaveBeenCalledTimes(1);
     expect(parent.span.mock.calls[0][0].output).toEqual(expectedOutput);
+    expect(parent.span.mock.calls[0][0].type).toBe("llm");
   });
 
   it("records only the message for a text stream", async () => {
@@ -134,5 +135,79 @@ describe("trackOpenAI streaming", () => {
     expect(parent.span.mock.calls[0][0].output).toEqual({
       message: `${first}${second}`,
     });
+  });
+});
+
+describe("trackOpenAI non-streaming", () => {
+  it("records the completion as an llm span", async () => {
+    const parent = { span: vi.fn(), update: vi.fn(), end: vi.fn() };
+    const client = { flush: vi.fn(), trace: vi.fn() } as unknown as Opik;
+    const answer = crypto.randomUUID();
+    const completion: OpenAI.Chat.Completions.ChatCompletion = {
+      id: "chatcmpl-1",
+      object: "chat.completion",
+      created: 0,
+      model: "gpt-5.5",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop",
+          logprobs: null,
+          message: { role: "assistant", content: answer, refusal: null },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    };
+    const createCompletion = async (params: unknown) => {
+      void params;
+      return completion;
+    };
+    const tracked = trackOpenAI(
+      {
+        chat: { completions: { create: createCompletion } },
+      },
+      { parent: parent as never, client }
+    );
+
+    await tracked.chat.completions.create({
+      model: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(parent.span).toHaveBeenCalledTimes(1);
+    expect(parent.span.mock.calls[0][0].type).toBe("llm");
+  });
+});
+
+describe("trackOpenAI errors", () => {
+  it("records a failed call as an llm span", async () => {
+    const parent = { span: vi.fn(), update: vi.fn(), end: vi.fn() };
+    const client = { flush: vi.fn(), trace: vi.fn() } as unknown as Opik;
+    const message = `boom_${crypto.randomUUID()}`;
+    const failCompletion = async (params: unknown) => {
+      void params;
+      throw new Error(message);
+    };
+    const tracked = trackOpenAI(
+      {
+        chat: {
+          completions: {
+            create: failCompletion,
+          },
+        },
+      },
+      { parent: parent as never, client }
+    );
+
+    await expect(
+      tracked.chat.completions.create({
+        model: "gpt-5.5",
+        messages: [{ role: "user", content: "hi" }],
+      })
+    ).rejects.toThrow(message);
+
+    expect(parent.span).toHaveBeenCalledTimes(1);
+    expect(parent.span.mock.calls[0][0].errorInfo.message).toBe(message);
+    expect(parent.span.mock.calls[0][0].type).toBe("llm");
   });
 });
