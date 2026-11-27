@@ -3201,8 +3201,10 @@ topics:
     #  With a large window, raise find.discoverySliceSize (for example 30d for 365d)
     backfillWindow: ${TOPICS_VECTORS_BACKFILL_WINDOW:-0s}
     #  Default: 5000
-    #  Description: The most traces one tick embeds per workspace in the fresh phase or the daily pass, and per project
-    #  in the backfill phase; the tick budget bounds the total. At most 100000: the find guards bound each read
+    #  Description: The most traces one read finds: one workspace read in the fresh phase or the daily pass (one per
+    #  workspace per tick), one project read in the backfill phase. A backfill project that wrote vectors and has more
+    #  left takes its workspace's next turn, so one large project can use the whole tick; the tick budget bounds the
+    #  total. At most 100000: the find guards bound each read
     maxTracesPerTick: ${TOPICS_VECTORS_MAX_TRACES_PER_TICK:-5000}
     #  Default: 256 (inference.limits.maxEmbedInputs)
     #  Description: Texts per embed call, at most inference.limits.maxEmbedInputs

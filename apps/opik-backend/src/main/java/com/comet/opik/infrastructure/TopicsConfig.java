@@ -806,7 +806,7 @@ public class TopicsConfig {
         @MaxDuration(value = 365, unit = TimeUnit.DAYS)
         private Duration backfillWindow;
 
-        /** The most traces one tick embeds per workspace, and per project in the backfill phase. */
+        /** The most traces one read finds: a workspace read, or a backfill project read; see config.yml. */
         @JsonProperty
         @Min(1) @Max(100_000) private int maxTracesPerTick;
 
