@@ -36,7 +36,7 @@ public class KMeans {
     }
 
     /**
-     * @param points        {@code n * dimensions} values
+     * @param points        at least {@code n * dimensions} values; the rows past {@code n} are not read
      * @param weights       per point, positive
      * @param maxIterations the Lloyd iterations one restart may take; a fit that reaches it stops there
      * @param restarts      the k-means++ starts; the one with the lowest weighted inertia is kept
@@ -48,8 +48,8 @@ public class KMeans {
         Preconditions.checkArgument(maxIterations > 0, "maxIterations must be positive, maxIterations '%s'",
                 maxIterations);
         Preconditions.checkArgument(restarts > 0, "restarts must be positive, restarts '%s'", restarts);
-        Preconditions.checkArgument(points.length == n * dimensions,
-                "points must hold one row per weight, weights '%s', values '%s'", n, points.length);
+        Preconditions.checkArgument(points.length >= n * dimensions,
+                "points must hold a row per weight, weights '%s', values '%s'", n, points.length);
         Preconditions.checkArgument(k >= 1 && k <= n, "k must be in [1, n], k '%s', n '%s'", k, n);
         for (double weight : weights) {
             Preconditions.checkArgument(Double.isFinite(weight) && weight > 0,

@@ -277,6 +277,44 @@ class TopicsAlgorithmRulesTest {
     }
 
     @Nested
+    @DisplayName("merge in place")
+    class MergeInPlace {
+
+        @Test
+        @DisplayName("gives the copy's merge and fit bit for bit, and the restore puts every row back")
+        void sameAsTheCopy() {
+            int d = 8;
+            var random = new SplittableRandom(7);
+            for (int round = 0; round < 20; round++) {
+                int n = 1 + random.nextInt(400);
+                // Repeats, in time order unrelated to the code point order of the texts.
+                var texts = IntStream.range(0, n).mapToObj(i -> "t" + random.nextInt(1 + n / 3)).toArray(String[]::new);
+                var vectors = new float[n * d];
+                for (int i = 0; i < vectors.length; i++) {
+                    vectors[i] = (float) random.nextDouble(-1, 1);
+                }
+                var original = vectors.clone();
+                var copied = IntentMerger.merge(texts, vectors, d);
+
+                var inPlace = IntentMerger.mergeInPlace(texts, vectors, d);
+                var merged = inPlace.merged();
+                assertThat(merged.vectors()).isSameAs(vectors);
+                assertThat(Arrays.copyOf(merged.vectors(), copied.size() * d)).isEqualTo(copied.vectors());
+                assertThat(merged.toBuilder().vectors(copied.vectors()).build()).usingRecursiveComparison()
+                        .isEqualTo(copied);
+                var weights = Arrays.stream(copied.weights()).asDoubleStream().toArray();
+                int k = 1 + random.nextInt(Math.min(copied.size(), 5));
+                assertThat(KMeans.fit(merged.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS))
+                        .usingRecursiveComparison()
+                        .isEqualTo(KMeans.fit(copied.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS));
+
+                inPlace.restore();
+                assertThat(vectors).isEqualTo(original);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("apply")
     class Apply {
 

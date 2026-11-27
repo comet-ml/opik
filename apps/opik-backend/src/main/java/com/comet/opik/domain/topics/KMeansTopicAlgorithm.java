@@ -60,12 +60,27 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     @Override
     public Clustering cluster(@NonNull TopicWindow window, int maxTopics) {
         var stats = JsonUtils.createObjectNode();
-        var merged = IntentMerger.merge(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        // The window's rows are reordered in place for the fit and the examples, not copied: a copy is the heap's
+        // largest item on a first build. They are restored before the window is read again.
+        var inPlace = IntentMerger.mergeInPlace(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        var merged = inPlace.merged();
+        KMeansResult fit;
+        List<List<String>> examples;
+        int k;
+        int perGroup;
+        try {
+            k = groups(merged.size());
+            var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
+            fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
+                    config.getKmeansMaxIterations(), config.getKmeansRestarts());
+            perGroup = authorExampleCount(k);
+            int frequent = Math.min(config.getAuthorFrequent(), perGroup);
+            examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
+                    perGroup - frequent);
+        } finally {
+            inPlace.restore();
+        }
         int unique = merged.size();
-        int k = groups(unique);
-        var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
-        var fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
-                config.getKmeansMaxIterations(), config.getKmeansRestarts());
         var groupOf = Arrays.stream(merged.textOfTrace()).map(text -> fit.labels()[text]).toArray();
         stats.put("unique_texts", unique);
         stats.put("k", k);
@@ -74,11 +89,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         stats.put("kmeans_iterations", fit.iterations());
 
         var groups = GroupSummaries.summarize(groupOf, k);
-        int perGroup = authorExampleCount(k);
-        int frequent = Math.min(config.getAuthorFrequent(), perGroup);
         stats.put("author_examples", perGroup);
-        var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
-                perGroup - frequent);
         var task = tasks.author();
         stats.put("author_task_version", task.version());
         var author = LlmRequest.builder()
