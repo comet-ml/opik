@@ -4,6 +4,7 @@ import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.LogCaptureUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.PostCutoverTraces;
@@ -243,6 +244,38 @@ class TopicsRunsIntegrationTest {
     }
 
     @Test
+    @DisplayName("an author answer that is text, or an object off the schema, fails its run llm_bad_answer at once, "
+            + "with no plan between, and the answer's text reaches no log line")
+    void badAnswerFailsTheRunAtOnce() {
+        var workspaceId = enabledWorkspace();
+        var marker = "SECRET-" + UUID.randomUUID();
+        var offSchema = InferenceJson.MAPPER.createObjectNode().put("topics", marker);
+        offSchema.putArray("assignment");
+        var answers = List.<JsonNode>of(
+                InferenceJson.MAPPER.getNodeFactory().textNode("Here are the topics: " + marker),
+                offSchema);
+        for (var answer : answers) {
+            var projectId = UUID.randomUUID();
+            data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
+            wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(answer, 0)));
+
+            var logs = LogCaptureUtils.logEventsOf(() -> {
+                assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
+                // No plan runs here, so no reconciler can end the row: the run's pod ends it.
+                Awaitility.await().atMost(WAIT).untilAsserted(() -> assertThat(data.topicProject(projectId).runStatus())
+                        .isEqualTo(TopicProject.RunStatus.FAILED));
+            });
+
+            var failed = data.topicProject(projectId);
+            assertThat(failed.runErrorCode()).isEqualTo(TopicProject.RunError.LLM_BAD_ANSWER);
+            assertThat(failed.failedRuns()).isEqualTo(1);
+            assertThat(logs).noneMatch(line -> line.contains(marker));
+            assertThat(logs).anyMatch(line -> line.startsWith("Topics run '%s' failed, project '%s', code "
+                    .formatted(failed.runId(), projectId) + "'llm_bad_answer'"));
+        }
+    }
+
+    @Test
     @DisplayName("a failed discovery run waits 1 h before the next plan queues it again; a run by hand does not wait")
     void retriesAfterAFailure() {
         var workspaceId = enabledWorkspace();
@@ -415,11 +448,13 @@ class TopicsRunsIntegrationTest {
             return null;
         });
 
-        planner.plan(now).block();
+        var logs = LogCaptureUtils.logEventsOf(() -> planner.plan(now).block());
 
         var project = TopicProject.builder().workspaceId(workspaceId).runMode(TopicProject.RunMode.DISCOVERY);
         assertProject(stale, project.projectId(stale).runId(staleRun).runStatus(TopicProject.RunStatus.FAILED)
                 .runErrorCode(TopicProject.RunError.ABANDONED).failedRuns(1).build());
+        assertThat(logs).anyMatch(line -> line.startsWith("Topics run '%s' abandoned, workspace '%s', project '%s', "
+                .formatted(staleRun, workspaceId, stale) + "mode 'discovery', silent for 'PT10M'"));
         assertProject(late, project.projectId(late).runId(lateRun).runStatus(TopicProject.RunStatus.CANCELLING)
                 .runErrorCode(null).failedRuns(0).cancelReason(TopicProject.CancelReason.DEADLINE).build());
         // A delete whose topic_projects cleanup failed: the planner still drops its queued run, not counted.
