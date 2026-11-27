@@ -2,6 +2,7 @@ package com.comet.opik.domain.topics;
 
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.hash.Hashing;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,7 +10,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -22,6 +25,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class KMeansTopicAlgorithmTest {
 
     private static final int D = TopicEmbedding.DIMENSIONS;
+    /** The digest of {@link #labellerDigest}'s labels by each {@link KMeansTopicAlgorithm#LABELLER_VERSION}. */
+    private static final Map<Integer, String> LABELLER_DIGESTS = Map.of(
+            1, "f71048c4e7f458c774092a384c0ff3880def6880b6ff3ef1ec0159ad20eca9e1");
     private final KMeansTopicAlgorithm algorithm = TopicsTestAlgorithm.algorithm();
     private final String workspaceId = RandomStringUtils.secure().nextAlphanumeric(10);
     private final UUID projectId = TopicsTestAlgorithm.ID_GENERATOR.generateId();
@@ -96,6 +102,54 @@ class KMeansTopicAlgorithmTest {
         assertThat(algorithm.labeller(List.of(), vectors(axis(0))).label(List.of(axis(1), new float[3])))
                 .containsExactly(TraceTopic.OTHER, null);
         assertThat(algorithm.labeller(List.of(), null).label(List.of(axis(2)))).containsExactly(TraceTopic.OTHER);
+    }
+
+    @Test
+    @DisplayName("the labeller's output on fixed vectors is the one its LABELLER_VERSION recorded: a change of the "
+            + "output needs a new version, so saved lists relabel their windows")
+    void labellerVersionHoldsItsOutput() {
+        assertThat(labellerDigest())
+                .as("the labeller's output changed: raise LABELLER_VERSION and add its digest to LABELLER_DIGESTS")
+                .isEqualTo(LABELLER_DIGESTS.get(KMeansTopicAlgorithm.LABELLER_VERSION));
+    }
+
+    /**
+     * Labels 2,000 seeded vectors, each a prototype or a random direction with noise of a random size, so the
+     * cosines span both thresholds, with a list of four topics of two prototypes each and two known-Other vectors.
+     * The digest is over each label's topic index, -1 for Other, so it does not depend on the ids.
+     */
+    private String labellerDigest() {
+        var random = new SplittableRandom(9410);
+        var topics = IntStream.range(0, 4).mapToObj(i -> topic(randomUnit(random), randomUnit(random))).toList();
+        var other = vectors(randomUnit(random), randomUnit(random));
+        var bases = new ArrayList<float[]>();
+        topics.forEach(topic -> bases.addAll(topic.vectors().vectors()));
+        bases.addAll(other.vectors());
+        var fixture = IntStream.range(0, 2_000).mapToObj(i -> {
+            var base = random.nextInt(bases.size() + 1) == bases.size()
+                    ? randomUnit(random)
+                    : bases.get(random.nextInt(bases.size()));
+            double noise = random.nextDouble() * 0.12;
+            var vector = new float[D];
+            for (int t = 0; t < D; t++) {
+                vector[t] = (float) (base[t] + noise * random.nextGaussian());
+            }
+            return TopicEmbedding.toUnit(vector);
+        }).toList();
+        var ids = topics.stream().map(Topic::id).toList();
+        var hasher = Hashing.sha256().newHasher();
+        for (var label : algorithm.labeller(topics, other).label(fixture)) {
+            hasher.putInt(ids.indexOf(label));
+        }
+        return hasher.hash().toString();
+    }
+
+    private static float[] randomUnit(SplittableRandom random) {
+        var vector = new float[D];
+        for (int t = 0; t < D; t++) {
+            vector[t] = (float) random.nextGaussian();
+        }
+        return TopicEmbedding.toUnit(vector);
     }
 
     private static JsonNode emptyAnswer() throws IOException {

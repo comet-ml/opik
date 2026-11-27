@@ -534,6 +534,11 @@ class TopicsRunServiceTest {
             public TopicLabeller labeller(List<Topic> topics, PrototypeVectors otherVectors) {
                 return vectors -> new UUID[vectors.size()];
             }
+
+            @Override
+            public String labellerFingerprint(List<Topic> topics, PrototypeVectors otherVectors) {
+                return "stub";
+            }
         };
         stubAnswer(FIXTURE.discoveryAnswer);
         var runId = start();

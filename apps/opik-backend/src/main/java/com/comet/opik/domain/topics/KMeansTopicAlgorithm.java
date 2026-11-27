@@ -6,6 +6,8 @@ import com.comet.opik.infrastructure.inference.BatchGenerateItem;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -38,6 +40,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     /** The rename prompt's examples of a merged topic: the first few of each of its groups', up to a cap. */
     private static final int MERGE_EXAMPLES_PER_GROUP = 4;
     private static final int MERGE_EXAMPLES = 16;
+
+    /** Part of {@link #labellerFingerprint}: a new version relabels every saved list's window once. */
+    static final int LABELLER_VERSION = 1;
 
     /**
      * Below this many groups a discovery run keeps each trace's cosine to each group centre, {@code n * k} doubles,
@@ -315,6 +320,35 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             }
             return out;
         };
+    }
+
+    /**
+     * A hash of everything {@link #labeller} labels by: the topic ids and their vectors in list order, the known-Other
+     * vectors, {@code assignMinCosine} and {@code otherGate}. Bump {@link #LABELLER_VERSION} when the assignment's
+     * code changes what it returns.
+     */
+    @Override
+    public String labellerFingerprint(@NonNull List<Topic> topics, @Nullable PrototypeVectors otherVectors) {
+        var hasher = Hashing.sha256().newHasher()
+                .putInt(LABELLER_VERSION)
+                .putDouble(config.getAssignMinCosine())
+                .putDouble(config.getOtherGate())
+                .putInt(topics.size());
+        for (var topic : topics) {
+            hasher.putLong(topic.id().getMostSignificantBits()).putLong(topic.id().getLeastSignificantBits());
+            putVectors(hasher, topic.vectors().vectors());
+        }
+        putVectors(hasher, otherVectors == null ? List.of() : otherVectors.vectors());
+        return hasher.hash().toString();
+    }
+
+    private static void putVectors(Hasher hasher, List<float[]> vectors) {
+        hasher.putInt(vectors.size());
+        for (var vector : vectors) {
+            for (float value : vector) {
+                hasher.putInt(Float.floatToRawIntBits(value));
+            }
+        }
     }
 
     /** One group per {@code textsPerGroup} unique texts, within the configured bounds and never more than the texts. */
