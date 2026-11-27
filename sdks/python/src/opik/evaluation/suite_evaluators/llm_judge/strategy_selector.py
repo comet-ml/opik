@@ -70,22 +70,55 @@ def _capability_for(
     The exact match on ``model_name_prefix`` wins; falls back to the longest
     matching prefix, so versioned ids like ``"gpt-5-nano-2025-08-07"``
     still resolve. Unknown models get ``DEFAULT_CAPABILITY``.
+
+    A provider-qualified name (``"anthropic/claude-sonnet-4-6"``) is matched on
+    its bare id. Model adapters keep the qualified form on ``model_name`` for
+    tracing and pricing, so it is the qualified string that arrives here; without
+    stripping, every qualified name silently lands on ``DEFAULT_CAPABILITY`` and
+    both the token budget and ``agentic_in_auto`` change.
     """
     table = (
         capabilities
         if capabilities is not None
         else capabilities_registry.MODEL_CAPABILITIES
     )
+    candidates = [model_name]
+    if "/" in model_name:
+        # Bedrock keeps a geo/vendor prefix: "bedrock/us.anthropic.claude-sonnet-4-6".
+        candidates.append(model_name.rsplit("/", 1)[1].rpartition("anthropic.")[2])
+
+    for candidate in candidates:
+        match = _match(candidate, table)
+        if match is not None:
+            return match
+    # An empty prefix matches everything via startswith, so it cannot
+    # compete on prefix length without shadowing real matches. It is still
+    # a deliberate caller configuration, so it is used ahead of
+    # DEFAULT_CAPABILITY.
+    catch_all = next((cap for cap in table if not cap.model_name_prefix), None)
+    if catch_all is not None:
+        return catch_all
+    return capabilities_registry.DEFAULT_CAPABILITY
+
+
+def _match(
+    candidate: str,
+    table: Sequence[capabilities_registry.ModelCapability],
+) -> Optional[capabilities_registry.ModelCapability]:
+    """Exact prefix match, else the longest matching prefix. Empty prefixes are
+    skipped here and handled by the caller."""
     best: Optional[capabilities_registry.ModelCapability] = None
-    best_len = -1
     for cap in table:
         prefix = cap.model_name_prefix
-        if model_name == prefix:
+        if not prefix:
+            continue
+        if candidate == prefix:
             return cap
-        if model_name.startswith(prefix) and len(prefix) > best_len:
+        if candidate.startswith(prefix) and (
+            best is None or len(prefix) > len(best.model_name_prefix)
+        ):
             best = cap
-            best_len = len(prefix)
-    return best if best is not None else capabilities_registry.DEFAULT_CAPABILITY
+    return best
 
 
 def compute_budget_tokens(
