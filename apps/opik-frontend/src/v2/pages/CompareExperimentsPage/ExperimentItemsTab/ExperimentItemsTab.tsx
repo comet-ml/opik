@@ -55,6 +55,7 @@ import ExperimentsFeedbackScoresSelect from "@/v2/pages-shared/experiments/Exper
 import {
   calculateHeightStyle,
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
 } from "@/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
 import { formatDuration } from "@/lib/date";
@@ -424,9 +425,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const retVal = [
-      generateSelectColumDef<ExperimentsCompare>({
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      }),
+      generateSelectColumDef<ExperimentsCompare>(
+        { verticalAlignment: calculateVerticalAlignment(experimentsCount) },
+        PAGE_BODY_SELECT_COLUMN_SIZE,
+      ),
     ];
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
