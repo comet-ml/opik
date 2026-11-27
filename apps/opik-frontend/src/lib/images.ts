@@ -7,6 +7,7 @@ import {
   ParsedMediaData,
   ParsedVideoData,
   ParsedAudioData,
+  ParsedPdfData,
   ATTACHMENT_TYPE,
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
@@ -279,6 +280,13 @@ export const AUDIO_URL_REGEX = new RegExp(
   "gi",
 );
 
+const DATA_PDF_REGEX = new RegExp(
+  `data:application/pdf;base64,${IMAGE_CHARS_REGEX}`,
+  "gi",
+);
+const PDF_URL_REGEX =
+  /https?:\/\/[^\s/"'<>{}\\|^`?#]+\/[^\s"'<>{}\\|^`?#]*\.pdf(?=[?#\s"'<>]|$)(?:[?#][^\s"'<>{}\\|^`]*)?/gi;
+
 export type ProcessedInput = {
   media: ParsedMediaData[];
   formattedData: object | undefined;
@@ -349,6 +357,9 @@ export const isVideoContent = (content?: Partial<VideoContent>) => {
   }
 
   if (content.type === "file") {
+    if (parsePdfValue(content.file?.file_id || content.file?.file_data)) {
+      return false;
+    }
     return Boolean(
       content.file?.file_id ||
       content.file?.file_data ||
@@ -424,6 +435,9 @@ export const isAudioContent = (content?: Partial<AudioContent>) => {
   }
 
   if (content.type === "file") {
+    if (parsePdfValue(content.file?.file_id || content.file?.file_data)) {
+      return false;
+    }
     return Boolean(
       content.file?.file_id ||
       content.file?.file_data ||
@@ -572,6 +586,20 @@ export const parseAudioValue = (
   return undefined;
 };
 
+export const parsePdfValue = (value: unknown): ParsedPdfData | undefined => {
+  if (!isString(value)) return undefined;
+
+  if (value.startsWith("data:")) {
+    if (value.match(DATA_PDF_REGEX)?.[0] === value) {
+      return { url: value, name: "Base64 PDF" };
+    }
+    return undefined;
+  }
+
+  const url = value.match(PDF_URL_REGEX)?.[0];
+  return url ? { url, name: extractFilename(url) } : undefined;
+};
+
 // here we extracting only URL base images that can have no extension that can be skipped with general regex
 const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
   if (isObject(input) && "messages" in input && isArray(input.messages)) {
@@ -586,6 +614,7 @@ const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
             if (isBackendAttachmentPlaceholder(url)) return;
             // Skip if URL has a video extension
             if (hasVideoExtension(url)) return;
+            if (parsePdfValue(url)) return;
 
             images.push({
               url,
@@ -961,12 +990,23 @@ export const processInputDataInternal = (input?: object): ProcessedInput => {
   const images: ParsedImageData[] = [];
   const videos: ParsedVideoData[] = [];
   const audios: ParsedAudioData[] = [];
+  const pdfs: ParsedPdfData[] = [];
   let imageIndex = 0;
   let videoIndex = 0;
   let audioIndex = 0;
 
   // STEP 1: Extract media that gets REPLACED with placeholders in the JSON string
   // This ensures array indices match the placeholder numbers in the transformed data
+
+  inputString = inputString.replace(DATA_PDF_REGEX, (url) => {
+    const placeholder = `[pdf_${pdfs.length}]`;
+    pdfs.push({
+      url,
+      name: `Base64 PDF: ${placeholder}`,
+      hasPlaceholder: true,
+    });
+    return placeholder;
+  });
 
   // Extract OpenAI audios and replace in string (must be before extractDataURIAudios)
   ({ updatedInput: inputString, nextIndex: audioIndex } = extractOpenAIAudios(
@@ -998,9 +1038,16 @@ export const processInputDataInternal = (input?: object): ProcessedInput => {
   // These are added to the end of the array after placeholder-based media
   extractOpenAIURLImages(input, images);
   extractOpenAIVideos(input, videos);
-  extractImageURLs(inputString, images);
-  extractVideoURLs(inputString, videos);
-  extractAudioURLs(inputString, audios);
+  // A PDF path or signed query may also contain an image or video extension.
+  const otherMediaInput = inputString.replace(PDF_URL_REGEX, (url) => {
+    if (!pdfs.some((pdf) => pdf.url === url)) {
+      pdfs.push({ url, name: extractFilename(url) });
+    }
+    return "";
+  });
+  extractImageURLs(otherMediaInput, images);
+  extractVideoURLs(otherMediaInput, videos);
+  extractAudioURLs(otherMediaInput, audios);
 
   // Don't deduplicate here - each placeholder needs its own media item
   // even if URLs are identical. This is critical for LLM message components
@@ -1019,6 +1066,7 @@ export const processInputDataInternal = (input?: object): ProcessedInput => {
       ...audio,
       type: ATTACHMENT_TYPE.AUDIO as const,
     })),
+    ...pdfs.map((pdf) => ({ ...pdf, type: ATTACHMENT_TYPE.PDF as const })),
   ];
 
   return {

@@ -66,7 +66,14 @@ export type ParsedAudioData = {
   hasPlaceholder?: boolean;
 };
 
+export type ParsedPdfData = {
+  url: string;
+  name: string;
+  hasPlaceholder?: boolean;
+};
+
 export type ParsedMediaData =
   | (ParsedImageData & { type: ATTACHMENT_TYPE.IMAGE })
   | (ParsedVideoData & { type: ATTACHMENT_TYPE.VIDEO })
-  | (ParsedAudioData & { type: ATTACHMENT_TYPE.AUDIO });
+  | (ParsedAudioData & { type: ATTACHMENT_TYPE.AUDIO })
+  | (ParsedPdfData & { type: ATTACHMENT_TYPE.PDF });

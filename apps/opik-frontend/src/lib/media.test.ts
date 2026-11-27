@@ -233,6 +233,24 @@ describe("media utilities", () => {
   });
 
   describe("detectAdditionalMedia", () => {
+    it("detects an extensionless PDF by its exact MIME type", async () => {
+      const url = "https://example.com/download";
+      const other = "https://example.com/other";
+      for (const mime of ["Application/PDF; version=1.7", "application/pdfx"]) {
+        vi.mocked(fetch).mockResolvedValueOnce(
+          new Response(null, { headers: { "Content-Type": mime } }),
+        );
+      }
+
+      expect(await detectAdditionalMedia({ url, other }, [])).toEqual([
+        { url, name: "download", type: ATTACHMENT_TYPE.PDF },
+      ]);
+      expect(fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({ method: "HEAD" }),
+      );
+    });
+
     it("should detect URLs without extensions and add to existing media", async () => {
       const snapVideo = "https://cf-st.sc-cdn.net/d/abc123";
       const regularImage = "https://example.com/photo.jpg";
@@ -370,6 +388,12 @@ describe("containsTruncatedMedia", () => {
   });
 
   describe("truncated base64 data URIs", () => {
+    it("detects a truncated PDF with a ClickHouse leading quote", () => {
+      expect(
+        containsTruncatedMedia('"data:application/pdf;base64,JVBERi0'),
+      ).toBe(true);
+    });
+
     it("should detect truncated image data URI", () => {
       expect(containsTruncatedMedia("data:image/png;base64,iVBORw0KGgo")).toBe(
         true,

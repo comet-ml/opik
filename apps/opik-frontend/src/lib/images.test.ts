@@ -43,6 +43,41 @@ describe("processInputData", () => {
     expect(result.formattedData).toEqual(input);
   });
 
+  it("extracts PDF URLs and replaces inline PDFs with numbered placeholders", () => {
+    const url = "https://example.com/report.png.PDF?version=2#page=1";
+    const inline = "data:application/pdf;base64,JVBERi0xLjc=";
+    const result = processInputData({ documents: [url, inline, inline] });
+
+    expect(result.media).toEqual([
+      {
+        url: inline,
+        name: "Base64 PDF: [pdf_0]",
+        type: ATTACHMENT_TYPE.PDF,
+        hasPlaceholder: true,
+      },
+      { url, name: "report.png.PDF", type: ATTACHMENT_TYPE.PDF },
+    ]);
+    expect(result.formattedData).toEqual({
+      documents: [url, "[pdf_0]", "[pdf_1]"],
+    });
+  });
+
+  it("keeps a PDF file in a message out of the audio and video lists", () => {
+    const url = "https://example.com/report.pdf";
+    const content = [{ type: "file", file: { file_id: url } }];
+    expect(processInputData({ messages: [{ content }] }).media).toEqual([
+      { url, name: "report.pdf", type: ATTACHMENT_TYPE.PDF },
+    ]);
+  });
+
+  it("only recognizes a PDF extension in the URL path", () => {
+    const values = [
+      "https://example.com/a.pdf.txt",
+      "https://example.com/?q=a.pdf",
+    ];
+    expect(processInputData({ values }).media).toEqual([]);
+  });
+
   it("should extract OpenAI image URLs from messages", () => {
     const input = {
       messages: [
