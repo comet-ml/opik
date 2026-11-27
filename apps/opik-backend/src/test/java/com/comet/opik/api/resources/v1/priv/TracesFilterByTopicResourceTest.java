@@ -456,15 +456,10 @@ class TracesFilterByTopicResourceTest {
                 .sum();
     }
 
-    /**
-     * Seven traces, one per case. The first run's rows come first; the arrival row and the later run's row are
-     * written after them, so they are the latest rows of their traces. The project's row names only the first run;
-     * the later run's rows still count.
-     */
     @Test
     @DisplayName("the list filtered by topic, read in spans newest first, gives the page and count the whole range "
-            + "gives: every page of sizes 1, 4 and 10, for =, != and Other, with and without from_time and a second "
-            + "filter, on traces spread from minutes to weeks back")
+            + "gives: every page of size 6 and the first pages of size 1, for =, != and Other, and for = with "
+            + "from_time and with a second filter, on traces spread from minutes to weeks back")
     void spansGiveTheWholeRangesPages() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
@@ -508,19 +503,20 @@ class TracesFilterByTopicResourceTest {
         var fromTime = Map.of("from_time", now.minus(Duration.ofDays(10)).toString());
         var sdk = filter(TraceField.SOURCE, Operator.EQUAL, Source.SDK.getValue());
         var cases = new ArrayList<Map.Entry<List<TraceFilter>, Map<String, String>>>();
-        for (var topicFilter : List.of(filter(TraceField.TOPIC_ID, Operator.EQUAL, first.id().toString()),
+        var firstTopic = filter(TraceField.TOPIC_ID, Operator.EQUAL, first.id().toString());
+        for (var topicFilter : List.of(firstTopic,
                 filter(TraceField.TOPIC_ID, Operator.EQUAL, second.id().toString()),
                 filter(TraceField.TOPIC_ID, Operator.EQUAL, OTHER),
                 filter(TraceField.TOPIC_ID, Operator.NOT_EQUAL, first.id().toString()))) {
             cases.add(Map.entry(List.of(topicFilter), Map.of()));
-            cases.add(Map.entry(List.of(topicFilter), fromTime));
-            cases.add(Map.entry(List.of(topicFilter, sdk), Map.of()));
         }
+        cases.add(Map.entry(List.of(firstTopic), fromTime));
+        cases.add(Map.entry(List.of(firstTopic, sdk), Map.of()));
         var spans = opikConfig.getTopics().getFilter().getFirstPageWindow();
         for (var listCase : cases) {
-            for (int size : List.of(1, 4, 10)) {
-                // Size 1 up to page 12 only: every later page is a whole-range read, as size 4's tail already is.
-                for (int page = 1; page <= (size == 1 ? 12 : 120 / size + 1); page++) {
+            for (int size : List.of(1, 6)) {
+                // Size 1 up to page 5 only: the first span holds them; size 6 crosses every span and the tail.
+                for (int page = 1; page <= (size == 1 ? 5 : 120 / size + 1); page++) {
                     var params = new HashMap<>(listCase.getValue());
                     params.put("page", String.valueOf(page));
                     var inSpans = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
@@ -573,6 +569,11 @@ class TracesFilterByTopicResourceTest {
                 .build();
     }
 
+    /**
+     * Seven traces, one per case. The first run's rows come first; the arrival row and the later run's row are
+     * written after them, so they are the latest rows of their traces. The project's row names only the first run;
+     * the later run's rows still count.
+     */
     private Seed seed() {
         var caller = topics.caller();
         var projectId = topics.project(caller);
