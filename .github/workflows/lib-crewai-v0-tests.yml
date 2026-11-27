@@ -6,6 +6,7 @@ name: SDK Lib CrewAI v0 Tests
 run-name: "SDK Lib CrewAI v0 Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
+  id-token: write
 env:
   # Retry transient PyPI/network failures longer before failing the build.
   PIP_RETRIES: 8
@@ -16,8 +17,6 @@ env:
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_PYTHON_SDK_TESTS }}
   AWS_DEFAULT_REGION: us-east-1
-  AWS_ACCESS_KEY_ID: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
@@ -73,12 +72,8 @@ jobs:
       - name: Configure AWS credentials for Bedrock
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          aws-access-key-id: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
-          role-to-assume: ${{ vars.BEDROCK_ROLE }}
+          role-to-assume: ${{ vars.BEDROCK_TESTS_ROLE_ARN }}
           aws-region: us-east-1
-          role-chaining: true
-          role-skip-session-tagging: true
 
       - name: Run tests
         run: |
