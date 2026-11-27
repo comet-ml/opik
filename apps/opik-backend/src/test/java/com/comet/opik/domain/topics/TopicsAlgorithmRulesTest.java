@@ -188,8 +188,7 @@ class TopicsAlgorithmRulesTest {
         void authorAnswerBudget() {
             var config = TopicsTestAlgorithm.config();
             int fits = (new TopicTasks().author().effectiveMaxTokens()
-                    - config.getMaxTopics() * KMeansTopicAlgorithm.AUTHOR_TOKENS_PER_TOPIC)
-                    / KMeansTopicAlgorithm.AUTHOR_TOKENS_PER_GROUP;
+                    - config.getMaxTopics() * config.getAuthorTokensPerTopic()) / config.getAuthorTokensPerGroup();
             config.setMaxGroups(fits);
             TopicsTestAlgorithm.algorithm(config);
 
