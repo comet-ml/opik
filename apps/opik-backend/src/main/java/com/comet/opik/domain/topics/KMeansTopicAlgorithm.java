@@ -102,9 +102,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         // COSINE_TABLE_BELOW_GROUPS, those cosines take less memory than the vectors, so the clustering keeps them and
         // the window can go while the call runs.
         var traces = k < COSINE_TABLE_BELOW_GROUPS
-                ? TraceCosines.table(PrototypeAssigner.cosines(window.vectors(), fit.centres(), k,
+                ? AssignmentInput.table(PrototypeAssigner.cosines(window.vectors(), fit.centres(), k,
                         TopicEmbedding.DIMENSIONS), k)
-                : TraceCosines.vectors(window.vectors());
+                : AssignmentInput.vectors(window.vectors());
         return new KMeansClustering(traces, maxTopics, groups, fit.centres(), author, stats);
     }
 
@@ -113,14 +113,14 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
      * as {@link PrototypeAssigner#cosines} computes a cosine exactly as the assigner does, and every prototype of a
      * discovery run is a group centre.
      */
-    private record TraceCosines(float[] vectors, double[] table, int groups) {
+    private record AssignmentInput(float[] vectors, double[] table, int groups) {
 
-        static TraceCosines vectors(float[] vectors) {
-            return new TraceCosines(vectors, null, 0);
+        static AssignmentInput vectors(float[] vectors) {
+            return new AssignmentInput(vectors, null, 0);
         }
 
-        static TraceCosines table(double[] table, int groups) {
-            return new TraceCosines(null, table, groups);
+        static AssignmentInput table(double[] table, int groups) {
+            return new AssignmentInput(null, table, groups);
         }
 
         int[] assign(PrototypeAssigner assigner, AppliedAnswer applied) {
@@ -138,7 +138,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     @RequiredArgsConstructor
     private final class KMeansClustering implements Clustering {
 
-        private final TraceCosines traces;
+        private final AssignmentInput traces;
         private final int maxTopics;
         private final List<GroupSummary> groups;
         private final float[] centres;
