@@ -58,6 +58,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.topics.TopicsTestData.GENERATE_PATH;
@@ -386,6 +389,37 @@ class TopicsDiscoveryJobIntegrationTest {
         try (var response = resetWorkspace(workspaceId, 0)) {
             assertThat(response.getStatus()).isEqualTo(400);
         }
+    }
+
+    @Test
+    @DisplayName("a project whose row a delete removes while the workspace reset runs is neither reset nor reported in "
+            + "flight: the reset waits for the delete")
+    void resetWorkspaceWaitsForADelete() throws Exception {
+        var workspaceId = enabledWorkspace();
+        var deleted = TopicsTestData.newId();
+        data.savedList(workspaceId, deleted, tomorrowStart(), FIXTURE.size());
+        var deleting = new CountDownLatch(1);
+        // Deletes the row and holds its lock for a while before the commit, as a project delete can.
+        var delete = CompletableFuture.runAsync(() -> template.inTransaction(WRITE, handle -> {
+            handle.attach(TopicProjectDAO.class).deleteByProjects(workspaceId, List.of(deleted));
+            deleting.countDown();
+            try {
+                Thread.sleep(Duration.ofSeconds(2));
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }));
+        assertThat(deleting.await(30, TimeUnit.SECONDS)).isTrue();
+
+        try (var response = resetWorkspace(workspaceId, null)) {
+            assertThat(response.getStatus()).isEqualTo(200);
+            var body = response.readEntity(JsonNode.class);
+            assertThat(body.path("reset").asInt()).isZero();
+            assertThat(body.path("skipped_in_flight").asInt()).isZero();
+            assertThat(body.path("in_flight_project_ids")).isEmpty();
+        }
+        delete.get(30, TimeUnit.SECONDS);
     }
 
     @Test

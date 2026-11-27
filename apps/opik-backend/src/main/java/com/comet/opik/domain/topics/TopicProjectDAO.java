@@ -320,7 +320,8 @@ public interface TopicProjectDAO {
 
     /**
      * The workspace's projects with a saved list, those built with an author task version below
-     * {@code authorVersionBelow} when it is set; a list whose version was not recorded counts as below.
+     * {@code authorVersionBelow} when it is set; a list whose version was not recorded counts as below. Locks the rows
+     * until the transaction ends, so a project delete cannot remove one before its reset.
      */
     @SqlQuery("""
             SELECT workspace_id, project_id FROM topic_projects
@@ -328,6 +329,7 @@ public interface TopicProjectDAO {
             AND (:authorVersionBelow IS NULL OR list_author_version IS NULL
                 OR list_author_version < :authorVersionBelow)
             ORDER BY project_id
+            FOR UPDATE
             """)
     List<TopicProjectKey> findLists(@Bind("workspaceId") String workspaceId,
             @Nullable @Bind("authorVersionBelow") Integer authorVersionBelow);

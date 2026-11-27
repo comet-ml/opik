@@ -522,7 +522,8 @@ class TopicRunStore {
     /**
      * Forgets the saved lists of the workspace's projects, those built with an author task version below
      * {@code authorVersionBelow} when it is set, in one transaction: each row as {@link #resetList}, then the topics
-     * of the rows that moved. A project with a run in flight keeps its list and is returned as skipped.
+     * of the rows that moved. The rows are locked first, so a row that does not move has a run in flight: that project
+     * keeps its list and is returned as skipped.
      */
     Mono<TopicsRunPlanner.WorkspaceReset> resetLists(@NonNull String workspaceId, Integer authorVersionBelow) {
         return jdbi(() -> template.inTransaction(WRITE, handle -> {
