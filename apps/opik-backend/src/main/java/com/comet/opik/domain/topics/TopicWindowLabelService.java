@@ -345,7 +345,7 @@ public class TopicWindowLabelService {
                     var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
                     long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
                     var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
-                    return store.insertTraceTopics(workspace, rows).thenReturn(totals);
+                    return store.insertTraceTopicsAndDropDeleted(workspace, rows).thenReturn(totals);
                 });
     }
 }

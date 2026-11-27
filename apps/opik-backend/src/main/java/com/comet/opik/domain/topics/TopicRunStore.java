@@ -427,9 +427,8 @@ class TopicRunStore {
     /**
      * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass, or of topic on arrival. A
      * transient error is retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per
-     * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
-     * Then the rows of traces deleted since they were read are deleted
-     * ({@link TraceTopicsDAO#deleteRowsOfDeletedTraces}).
+     * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No
+     * rows, no insert.
      */
     Mono<Void> insertTraceTopics(@NonNull TopicsMetrics.Workspace workspace, @NonNull List<TraceTopic> rows) {
         if (rows.isEmpty()) {
@@ -451,6 +450,21 @@ class TopicRunStore {
                     metrics.traceTopicsInsert(workspace, true);
                 })
                 .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
+                .then();
+    }
+
+    /**
+     * {@link #insertTraceTopics}, then the rows of traces deleted since the run or its labelling pass read them are
+     * deleted ({@link TraceTopicsDAO#deleteRowsOfDeletedTraces}): those reads come minutes before the insert. Topic on
+     * arrival writes its rows seconds after it reads the vectors, under its own short timeout, so it inserts without
+     * this check.
+     */
+    Mono<Void> insertTraceTopicsAndDropDeleted(@NonNull TopicsMetrics.Workspace workspace,
+            @NonNull List<TraceTopic> rows) {
+        if (rows.isEmpty()) {
+            return Mono.empty();
+        }
+        return insertTraceTopics(workspace, rows)
                 .then(Mono.defer(() -> traceTopicsDAO.deleteRowsOfDeletedTraces(rows)
                         .doOnNext(deleted -> {
                             if (deleted > 0) {
