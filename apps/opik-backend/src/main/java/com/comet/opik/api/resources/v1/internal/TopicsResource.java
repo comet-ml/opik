@@ -91,7 +91,7 @@ public class TopicsResource {
 
     @POST
     @Path("/reset")
-    @Operation(operationId = "resetWorkspaceTopics", summary = "Forget a workspace's topic lists", description = "Resets, as the project reset does, every project of the workspace that has a saved list, in one transaction. A project with a run in flight keeps its list and is listed in the answer. The workspace is opted in to topics at stage build or later.", responses = {
+    @Operation(operationId = "resetWorkspaceTopics", summary = "Forget a workspace's topic lists", description = "Resets, as the project reset does, every project of the workspace that has a saved list, topics.storage.deleteBatchSize projects per transaction. A project with a run in flight keeps its list and is listed in the answer. The workspace is opted in to topics at stage build or later.", responses = {
             @ApiResponse(responseCode = "200", description = "The counts of lists reset and of projects skipped for a run in flight, with the skipped project ids"),
             @ApiResponse(responseCode = "409", description = "The workspace is not opted in at stage build or later, or topics are off; nothing changed")})
     public Response resetWorkspace(@QueryParam("workspace_id") @NotBlank String workspaceId) {

@@ -719,7 +719,8 @@ The next discovery run, planned or by hand, builds a new one.
 - **One project:** the project reset above.
 - **Many projects:** the workspace reset below.
 
-The workspace reset forgets the lists of every project of the workspace that has one, in one transaction:
+The workspace reset forgets the lists of every project of the workspace that has one, `topics.storage.deleteBatchSize`
+projects per transaction:
 
 ```bash
 curl -X POST "http://<opik-backend>:8080/v1/internal/topics/reset?workspace_id=<workspace_id>"

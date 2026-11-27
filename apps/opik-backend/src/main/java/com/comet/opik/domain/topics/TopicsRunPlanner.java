@@ -161,10 +161,6 @@ public class TopicsRunPlanner {
         });
     }
 
-    /** What a workspace's reset by hand did: the projects whose lists it forgot, and those it skipped. */
-    public record WorkspaceReset(@NonNull List<UUID> reset, @NonNull List<UUID> inFlight) {
-    }
-
     /**
      * Forgets the saved lists of the workspace's projects by hand, as {@link #resetByHand} does one project's. A project
      * with a run in flight keeps its list and is returned as skipped.

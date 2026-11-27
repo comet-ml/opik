@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.lock.LockService.Lock;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
@@ -54,6 +55,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -337,11 +339,7 @@ class TopicsDiscoveryJobIntegrationTest {
 
         try (var response = resetWorkspace(workspaceId)) {
             assertThat(response.getStatus()).isEqualTo(200);
-            var body = response.readEntity(JsonNode.class);
-            assertThat(body.path("reset").asInt()).isEqualTo(2);
-            assertThat(body.path("skipped_in_flight").asInt()).isEqualTo(1);
-            assertThat(body.path("in_flight_project_ids")).singleElement()
-                    .satisfies(id -> assertThat(id.asText()).isEqualTo(inFlight.toString()));
+            assertThat(response.readEntity(JsonNode.class)).isEqualTo(resetAnswer(2, List.of(inFlight)));
         }
         for (var projectId : List.of(first, second)) {
             assertThat(data.topics(projectId)).isEmpty();
@@ -381,10 +379,7 @@ class TopicsDiscoveryJobIntegrationTest {
 
         try (var response = resetWorkspace(workspaceId)) {
             assertThat(response.getStatus()).isEqualTo(200);
-            var body = response.readEntity(JsonNode.class);
-            assertThat(body.path("reset").asInt()).isZero();
-            assertThat(body.path("skipped_in_flight").asInt()).isZero();
-            assertThat(body.path("in_flight_project_ids")).isEmpty();
+            assertThat(response.readEntity(JsonNode.class)).isEqualTo(resetAnswer(0, List.of()));
         }
         delete.get(30, TimeUnit.SECONDS);
     }
@@ -492,6 +487,11 @@ class TopicsDiscoveryJobIntegrationTest {
                 .queryParam("workspace_id", workspaceId)
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .post(Entity.json(""));
+    }
+
+    private static JsonNode resetAnswer(int reset, List<UUID> inFlight) {
+        return JsonUtils.valueToTree(Map.of("reset", reset, "skipped_in_flight", inFlight.size(),
+                "in_flight_project_ids", inFlight));
     }
 
     /** The planner's window end: tomorrow (UTC). */
