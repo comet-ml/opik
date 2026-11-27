@@ -247,3 +247,27 @@ class TestSearchFiles:
         ]
         assert result["matches"][0]["context_before"] == ["a"]
         assert result["matches"][1]["context_before"] == []
+
+    @patch("opik.runner.bridge_handlers.search_files.subprocess.run")
+    def test_search_files__binary_match_line__does_not_become_file_name(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        _git_init(tmp_path)
+        mock_run.side_effect = lambda *args, **kwargs: MagicMock(
+            returncode=0,
+            stdout=(
+                b"Binary file logo.png matches\n"
+                b"a-1.md\n2:TARGET\n"
+                b"Binary file data.bin matches\n"
+                b"b.md\n4:TARGET\n"
+            ),
+            stderr=b"",
+        )
+        handler = self._handler(tmp_path)
+
+        result = handler.execute({"pattern": "TARGET"}, timeout=_TEST_TIMEOUT)
+
+        assert [(m["file"], m["line"]) for m in result["matches"]] == [
+            ("a-1.md", 2),
+            ("b.md", 4),
+        ]

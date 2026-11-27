@@ -24,6 +24,7 @@ _CONTEXT_LINES = 3
 _MAX_PATTERN_LENGTH = 500
 # A content line under a file heading is `N:text` (match) or `N-text` (context).
 _CONTENT_LINE = re.compile(r"(\d+)([:-])")
+_BINARY_MATCH_LINE = re.compile(r"Binary file .* matches")
 
 
 class SearchFilesHandler(BaseHandler):
@@ -121,6 +122,16 @@ class SearchFilesHandler(BaseHandler):
         for raw_bytes in result.stdout.split(b"\n"):
             raw_line = raw_bytes.removesuffix(b"\r").decode("utf-8", errors="replace")
             if raw_line == "":
+                expect_file = True
+                continue
+
+            # A binary hit prints "Binary file X matches" with no heading and no
+            # break line. Skip it and keep waiting for the next file name.
+            if _BINARY_MATCH_LINE.fullmatch(raw_line):
+                _flush_entry()
+                current_entry = {}
+                context_before = []
+                context_after = []
                 expect_file = True
                 continue
 
