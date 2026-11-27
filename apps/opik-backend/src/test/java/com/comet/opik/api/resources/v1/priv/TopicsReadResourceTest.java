@@ -137,7 +137,6 @@ class TopicsReadResourceTest {
                         new CustomConfig("aiLabels.healthInterval", "1h"),
                         new CustomConfig("topics.enabled", "true"),
                         new CustomConfig("topics.vectors.tickInterval", "1h"),
-                        new CustomConfig("topics.nightly.enabled", "false"),
                         new CustomConfig("topics.discovery.enabled", "false")))
                 .build());
     }

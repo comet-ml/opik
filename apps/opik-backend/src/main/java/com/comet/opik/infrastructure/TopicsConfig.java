@@ -12,6 +12,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -21,6 +22,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.quartz.CronExpression;
 import org.redisson.client.codec.Codec;
 
 import java.util.Arrays;
@@ -46,6 +48,9 @@ public class TopicsConfig {
     private RunConfig run;
 
     @Valid @NotNull @JsonProperty
+    private FilterConfig filter;
+
+    @Valid @NotNull @JsonProperty
     private ReadConfig read;
 
     @Valid @NotNull @JsonProperty
@@ -56,6 +61,12 @@ public class TopicsConfig {
 
     @Valid @NotNull @JsonProperty
     private RunsConfig runs;
+
+    @Valid @NotNull @JsonProperty
+    private NightlyConfig nightly;
+
+    @Valid @NotNull @JsonProperty
+    private ArrivalConfig arrival;
 
     /**
      * The k-means topic algorithm's tunables: quality against run time and prompt length. They depend on the embedding
@@ -163,6 +174,18 @@ public class TopicsConfig {
             return nightlyFrequent <= nightlyExamples;
         }
 
+        /** Verify shows a topic's examples from the ones naming picked for it. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyTopicExamples must not be above nightlyTopicExamples") public boolean isVerifyTopicExamplesOrdered() {
+            return verifyTopicExamples <= nightlyTopicExamples;
+        }
+
+        /** Verify shows a group's examples from the ones its summary picked. */
+        @JsonIgnore
+        @AssertTrue(message = "topics.algorithm.verifyGroupExamples must not be above nightlyExamples") public boolean isVerifyGroupExamplesOrdered() {
+            return verifyGroupExamples <= nightlyExamples;
+        }
+
         @JsonIgnore
         @AssertTrue(message = "topics.algorithm.minGroups must not be above maxGroups") public boolean isGroupsOrdered() {
             return minGroups <= maxGroups;
@@ -200,6 +223,35 @@ public class TopicsConfig {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private volatile ParsedWorkspaces parsedWorkspaces;
+
+    /** Topic on arrival: see {@code TopicsArrivalService}. */
+    @Data
+    public static class ArrivalConfig {
+
+        /**
+         * The arrival steps of one workspace in one vectors tick (the saved lists read and the insert after each
+         * workspace read's vectors) end within this, in total.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration timeout;
+
+        /**
+         * A step starts only with at least this much left of {@code timeout} and of the tick's budget: one that starts
+         * with almost no time would time out and count as a failure when it only ran out of budget.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
+        @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+        private Duration minStepTime;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.arrival.minStepTime must not be above topics.arrival.timeout") public boolean isMinStepTimeValid() {
+            return minStepTime == null || timeout == null
+                    || minStepTime.toNanoseconds() <= timeout.toNanoseconds();
+        }
+    }
 
     /** A topic run's settings: a discovery run, a nightly update and their labelling pass. */
     @Data
@@ -415,6 +467,33 @@ public class TopicsConfig {
     }
 
     /**
+     * The guards of a trace query filtered by topic: ClickHouse settings on the whole query, added only when the
+     * filters have a topic. A query that trips one answers 503 with Retry-After.
+     */
+    @Data
+    public static class FilterConfig {
+
+        /**
+         * ClickHouse's {@code max_execution_time}, in whole seconds. At most 4 minutes: a longer query outlives the
+         * progress headers the r2dbc driver can take ({@code databaseAnalytics.httpHeadersProgressIntervalMs}), so it
+         * fails to parse instead of answering 503.
+         */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 4, unit = TimeUnit.MINUTES)
+        private Duration maxExecutionTime;
+
+        /** ClickHouse's {@code max_memory_usage}, in bytes; it counts the trace read and the topic subquery together. */
+        @JsonProperty
+        @Min(1) @Max(64L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
+            return maxExecutionTime == null || maxExecutionTime.toMilliseconds() % 1000 == 0;
+        }
+    }
+
+    /**
      * Each listed workspace id and its stage, from stripped, blank-free entries; an id without a suffix is at
      * {@link TopicsStage#ALL}. An id repeated with the same stage is listed once. Throws on an unknown stage or an id
      * listed with two stages, which {@link #isEnabledWorkspacesValid()} rejects at startup. Not named as a bean getter,
@@ -512,6 +591,37 @@ public class TopicsConfig {
             } catch (IllegalArgumentException exception) {
                 return false;
             }
+        }
+    }
+
+    /**
+     * The nightly update of each project that has a topic list: each plan of the leader queues the night's updates as
+     * runs of mode {@code update}, for the workspaces listed at stage {@code nightly} or later.
+     */
+    @Data
+    public static class NightlyConfig {
+
+        /** Quartz cron, UTC. The night is the UTC date it fires on and starts at its first fire that day. */
+        @NotBlank @JsonProperty
+        private String schedule;
+
+        /** No project is queued after this much of the night, from its start; the rest run the next night. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.MINUTES)
+        @MaxDuration(value = 20, unit = TimeUnit.HOURS)
+        private Duration budget;
+
+        /** A project whose last this many discovery runs or nightly updates failed in a row is paused. */
+        @JsonProperty
+        @Min(1) @Max(100) private int pauseFailures;
+
+        /** A paused project waits this many nights from the night its last failed run started. */
+        @JsonProperty
+        @Min(1) @Max(90) private int pauseNights;
+
+        @JsonIgnore
+        @AssertTrue(message = "topics.nightly.schedule must be a Quartz cron expression") public boolean isScheduleValid() {
+            return schedule == null || CronExpression.isValidExpression(schedule);
         }
     }
 
@@ -674,7 +784,7 @@ public class TopicsConfig {
         @MaxDuration(value = 90, unit = TimeUnit.DAYS)
         private Duration longWindow;
 
-        /** How often the daily long-window pass starts, and the tick discovers each workspace's projects. */
+        /** How often each workspace's daily long-window pass is due, and the tick discovers its projects. */
         @NotNull @JsonProperty
         @MinDuration(value = 1, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 7, unit = TimeUnit.DAYS)
@@ -712,8 +822,40 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration leaseSlack;
 
+        /**
+         * The most undrained projects a workspace read leaves out by id: the ids go into the query text, about 40 bytes
+         * each. A workspace with more is not read by the workspace read until its backfill brings it under.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000) private int maxExcludedProjects;
+
+        /** The most workspaces whose projects one tick discovers, so a new leader's first ticks still serve traces. */
+        @JsonProperty
+        @Min(1) @Max(1_000) private int maxDiscoveriesPerTick;
+
+        /**
+         * The share of {@code tickBudget} the fresh phase leaves to project discovery on a tick with a workspace due
+         * for it. Discovery runs after the fresh phase and never takes more than half the budget, so at most 0.5.
+         */
+        @JsonProperty
+        @DecimalMin("0.0") @DecimalMax("0.5") private double discoveryMinShare;
+
+        /**
+         * A project with at most this many traces in the backfill window, as discovered, is read in one query over the
+         * whole window; a larger one in {@code find.sliceSize} slices. One read of a project costs about 0.45 KB of
+         * memory and 6 rows read per trace, so at 250,000 one read stays near 110 MB and 1.5M rows, an eighth of the
+         * default {@code find.maxMemoryUsage}, which leaves room for the count being approximate.
+         */
+        @JsonProperty
+        @Min(1) @Max(10_000_000) private long oneSliceMaxTraces;
+
         @Valid @NotNull @JsonProperty
         private FindConfig find;
+
+        /** The long-window pass's and the backfill's window: {@code backfillWindow} when above zero, else {@code longWindow}. */
+        public java.time.Duration backfillOrLongWindow() {
+            return (backfillWindow.toMilliseconds() > 0 ? backfillWindow : longWindow).toJavaDuration();
+        }
 
         @JsonIgnore
         @AssertTrue(message = "topics.vectors.tickBudget must be shorter than topics.vectors.tickInterval") public boolean isTickBudgetValid() {

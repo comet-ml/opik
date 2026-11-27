@@ -429,6 +429,54 @@ class DatabaseAnalyticsFactoryIntegrationTest {
         }
     }
 
+    // Alphanumeric is what existing installs use. Reserved characters cut the host off a URL's user-info part, so the
+    // driver fell back to localhost:8123. A percent-escape or '+' was decoded in the URL, so it must now stay literal.
+    Stream<Arguments> passwordScenarios() {
+        return Stream.of(
+                Arguments.of("alphanumeric", ""),
+                Arguments.of("URL-reserved characters", "a/b?c#d@e:f%g=h+i"),
+                Arguments.of("percent-escapes and plus", "p%40ss+word%2F"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("passwordScenarios")
+    @DisplayName("the password connects as-is through both the R2DBC and the v2 client")
+    void passwordConnects(String name, String passwordPrefix) {
+        var password = passwordPrefix + RandomStringUtils.secure().nextAlphanumeric(8);
+        try (var container = ClickHouseContainerUtils.newClickHouseContainer(false).withPassword(password)) {
+            container.start();
+            var factory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(container, "default");
+
+            var r2dbcUser = Mono.usingWhen(
+                    factory.build().create(),
+                    connection -> Flux.from(connection.createStatement("SELECT currentUser() AS user").execute())
+                            .flatMap(result -> result.map((row, _) -> row.get("user", String.class)))
+                            .single(),
+                    Connection::close)
+                    .block();
+
+            assertThat(r2dbcUser).isEqualTo(container.getUsername());
+
+            try (var client = factory.buildClient()) {
+                var v2User = client.queryAll("SELECT currentUser() AS user").getFirst().getString("user");
+
+                assertThat(v2User).isEqualTo(container.getUsername());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("toString leaves the credentials out")
+    void toStringLeavesCredentialsOut() {
+        var username = RandomStringUtils.secure().nextAlphanumeric(16);
+        var password = RandomStringUtils.secure().nextAlphanumeric(16);
+        var factory = new DatabaseAnalyticsFactory();
+        factory.setUsername(username);
+        factory.setPassword(password);
+
+        assertThat(factory.toString()).doesNotContain(username, password);
+    }
+
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {
         return readSettings(connectionFactory, List.of(names));
     }

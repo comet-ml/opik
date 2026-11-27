@@ -48,6 +48,7 @@ import {
   generateGroupedRowCellDef,
   generatePinColumDef,
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
@@ -343,7 +344,10 @@ export const useExperimentsTableConfig = <
               checkboxClickHandler,
             ),
           ]
-        : [generateSelectColumDef<T>(), generatePinColumDef<T>()];
+        : [
+            generateSelectColumDef<T>(undefined, PAGE_BODY_SELECT_COLUMN_SIZE),
+            generatePinColumDef<T>(),
+          ];
 
     const regularColumns = convertColumnDataToColumn<T, T>(
       hasGrouping && nameColumn ? columnsWithoutName : defaultColumns,

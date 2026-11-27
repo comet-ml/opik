@@ -40,10 +40,11 @@ class TopicRunOutcomes {
         return stats;
     }
 
-    TopicRunOutcome saved(@NonNull TopicRun run, @NonNull TopicRunRows rows, boolean inserted) {
+    /** A saved run's outcome; {@code traceTopics} is the count of {@code trace_topics} rows it wrote. */
+    TopicRunOutcome saved(@NonNull TopicRun run, @NonNull ObjectNode stats, int traceTopics) {
         log.info("Topics run '{}' saved, project '{}', trace topics '{}', stats '{}'", run.runId(), run.projectId(),
-                inserted ? rows.traceTopics().size() : 0, rows.stats());
-        return outcome(run, rows.stats(), TopicProject.RunStatus.SAVED, null);
+                traceTopics, stats);
+        return outcome(run, stats, TopicProject.RunStatus.SAVED, null);
     }
 
     /**

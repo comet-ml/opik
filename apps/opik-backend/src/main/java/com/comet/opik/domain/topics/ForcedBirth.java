@@ -244,7 +244,8 @@ class ForcedBirth {
                 }
                 state.retire(lowest, RetiredReason.REPLACED);
             }
-            int born = state.born(TopicText.name(group.name()), group.definition());
+            int born = state.born(TopicText.name(group.name()),
+                    TopicText.oneLine(group.definition(), TopicPrompts.MAX_DEFINITION_LENGTH));
             for (int id : group.groups()) {
                 decided.put(id, born, Result.BORN, born);
             }

@@ -21,7 +21,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -232,16 +234,16 @@ public class TopicWindowDAO {
     private final @NonNull @Config("topics") TopicsConfig config;
 
     /**
-     * Per project of {@code projectIds}, the traces with a vector created in {@code [from, to)}; a project with none is
-     * left out.
+     * Per project of {@code projectIds}, the traces with a vector created in {@code [from, to)}; 0 for a project with
+     * none.
      */
-    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+    public Mono<Map<UUID, Long>> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, long maxExecutionSeconds) {
         return countByProject(workspaceId, projectIds, from, to, config.getRun().getRead(), maxExecutionSeconds);
     }
 
     /** {@link #countByProject} under the given guards, for a caller that is not the run (the read API). */
-    public Flux<ProjectCount> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
+    public Mono<Map<UUID, Long>> countByProject(@NonNull String workspaceId, @NonNull Collection<UUID> projectIds,
             @NonNull Instant from, @NonNull Instant to, @NonNull ReadGuards guards, long maxExecutionSeconds) {
         Preconditions.checkArgument(!projectIds.isEmpty(), "a window count takes at least one project");
         var template = getSTWithLogComment(COUNT_BY_PROJECT, "topics:count_window", workspaceId, null,
@@ -255,10 +257,14 @@ public class TopicWindowDAO {
                         .bind("window_from", from.toString())
                         .bind("window_to", to.toString())
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> ProjectCount.builder()
-                        .projectId(UUID.fromString(row.get("project_id", String.class)))
-                        .traces(((Number) row.get("traces", Object.class)).longValue())
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("project_id", String.class)),
+                        ((Number) row.get("traces", Object.class)).longValue())))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap<UUID, Long>::new)
+                .map(counts -> {
+                    projectIds.forEach(projectId -> counts.putIfAbsent(projectId, 0L));
+                    return counts;
+                });
     }
 
     /**
@@ -412,10 +418,6 @@ public class TopicWindowDAO {
             }
         }
         return vector;
-    }
-
-    @Builder(toBuilder = true)
-    record ProjectCount(@NonNull UUID projectId, long traces) {
     }
 
     /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */

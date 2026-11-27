@@ -17,13 +17,268 @@ export declare namespace TopicsClient {
 }
 
 /**
- * Project topics and internal topics operations
+ * Internal topics operations
  */
 export class TopicsClient {
     protected readonly _options: NormalizedClientOptions<TopicsClient.Options>;
 
     constructor(options: TopicsClient.Options = {}) {
         this._options = normalizeClientOptions(options);
+    }
+
+    /**
+     * Deletes the project's topics and clears the list on its topic_projects row, in one transaction, so its next discovery run, planned or by hand, builds a new list. The row's run and vectors backfill state stay. The workspace is opted in to topics at stage build or later, and the project has a topic_projects row and no run in flight.
+     *
+     * @param {string} projectId
+     * @param {OpikApi.ResetProjectTopicsRequest} request
+     * @param {TopicsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.ConflictError}
+     *
+     * @example
+     *     await client.topics.resetProjectTopics("projectId", {
+     *         workspaceId: "workspace_id"
+     *     })
+     */
+    public resetProjectTopics(
+        projectId: string,
+        request: OpikApi.ResetProjectTopicsRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__resetProjectTopics(projectId, request, requestOptions));
+    }
+
+    private async __resetProjectTopics(
+        projectId: string,
+        request: OpikApi.ResetProjectTopicsRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { workspaceId } = request;
+        const _queryParams: Record<string, unknown> = {
+            workspace_id: workspaceId,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/internal/topics/projects/${core.url.encodePathParam(projectId)}/reset`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/internal/topics/projects/{projectId}/reset",
+        );
+    }
+
+    /**
+     * Queues the project's discovery run and returns its run id; any pod runs it. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The window ends at the start of the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago). The workspace is opted in to topics at stage build or later, the window holds topics.run.minVectors vectors of the project, and the project has no list and no run in flight. The project's vectors backfill must have drained: ignore_backfill=true builds it from the vectors it has so far. A failed discovery run's retry wait and topics.runs.maxInFlight do not apply.
+     *
+     * @param {string} projectId
+     * @param {OpikApi.RunProjectTopicsRequest} request
+     * @param {TopicsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ConflictError}
+     * @throws {@link OpikApi.ServiceUnavailableError}
+     *
+     * @example
+     *     await client.topics.runProjectTopics("projectId", {
+     *         workspaceId: "workspace_id"
+     *     })
+     */
+    public runProjectTopics(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__runProjectTopics(projectId, request, requestOptions));
+    }
+
+    private async __runProjectTopics(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { workspaceId, night, ignoreBackfill } = request;
+        const _queryParams: Record<string, unknown> = {
+            workspace_id: workspaceId,
+            night,
+            ignore_backfill: ignoreBackfill,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/internal/topics/projects/${core.url.encodePathParam(projectId)}/run`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                case 503:
+                    throw new OpikApi.ServiceUnavailableError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/internal/topics/projects/{projectId}/run",
+        );
+    }
+
+    /**
+     * Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+     *
+     * @param {string} projectId
+     * @param {OpikApi.RunProjectTopicsNightRequest} request
+     * @param {TopicsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ConflictError}
+     * @throws {@link OpikApi.ServiceUnavailableError}
+     *
+     * @example
+     *     await client.topics.runProjectTopicsNight("projectId", {
+     *         workspaceId: "workspace_id"
+     *     })
+     */
+    public runProjectTopicsNight(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsNightRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__runProjectTopicsNight(projectId, request, requestOptions));
+    }
+
+    private async __runProjectTopicsNight(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsNightRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { workspaceId, night } = request;
+        const _queryParams: Record<string, unknown> = {
+            workspace_id: workspaceId,
+            night,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/internal/topics/projects/${core.url.encodePathParam(projectId)}/night`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                case 503:
+                    throw new OpikApi.ServiceUnavailableError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/internal/topics/projects/{projectId}/night",
+        );
     }
 
     /**

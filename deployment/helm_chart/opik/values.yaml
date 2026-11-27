@@ -452,8 +452,13 @@ component:
       - configMapRef:
           name: opik-python-backend
 
+    # -- securityContext of the python-backend containers. The `RuntimeDefault` seccomp profile blocks system calls
+    # that code metrics have no use for. With `env.PYTHON_CODE_EXECUTOR_STRATEGY: "docker"` the chart adds
+    # `privileged: true`, which the Docker daemon inside the container needs; the default process strategy runs
+    # unprivileged. If the strategy comes from `envFrom` or `secretRefs` instead, set `privileged: true` here yourself.
     securityContext:
-      privileged: true
+      seccompProfile:
+        type: RuntimeDefault
     networkPolicy:
       enabled: false
       annotations: {}

@@ -118,6 +118,40 @@ def test_guardrail_validate__guardrails_not_available__backend_message_surfaced(
         guardrail.validate("some text")
 
 
+@pytest.mark.parametrize(
+    "status_code, body, reason",
+    [
+        (
+            422,
+            {"errors": ["text must be at most 16384 characters"]},
+            "text must be at most 16384 characters",
+        ),
+        (502, "<html>502 Bad Gateway</html>", "status code 502"),
+    ],
+)
+def test_guardrail_validate__backend_error_response__error_names_reason_without_headers(
+    fake_backend, monkeypatch, status_code, body, reason
+):
+    _record_opik_calls(
+        monkeypatch,
+        rest_api_core.ApiError(
+            status_code=status_code,
+            headers={"set-cookie": "AWSALB=load-balancer-cookie"},
+            body=body,
+        ),
+    )
+    guardrail = Guardrail(rules=[PII(entities=["EMAIL_ADDRESS"])])
+    expected_error = f"Guardrail could not be evaluated, failing closed: {reason}"
+
+    with pytest.raises(exceptions.GuardrailValidationError) as error:
+        guardrail.validate("some text")
+
+    opik.flush_tracker()
+
+    assert str(error.value) == expected_error
+    assert _guardrail_span_output(fake_backend)["error"] == expected_error
+
+
 def test_guardrail_validate__opik_rules__sent_to_opik_in_one_call(
     fake_backend, monkeypatch
 ):

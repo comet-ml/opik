@@ -14,12 +14,14 @@ import com.comet.opik.api.resources.v1.jobs.TopicVectorsJob;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.ailabels.AiLabelStatusDAO;
+import com.comet.opik.domain.ailabels.AiLabelTaskRegistry;
 import com.comet.opik.domain.ailabels.AiLabelWorkspaceDAO;
 import com.comet.opik.domain.ailabels.AiLabelsDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TopicsConfig;
+import com.comet.opik.infrastructure.TopicsStage;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -34,18 +36,22 @@ import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jobs.GuiceJobManager;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.quartz.JobKey;
 import org.quartz.SchedulerException;
 import org.quartz.SimpleTrigger;
@@ -66,8 +72,10 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -76,6 +84,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -84,7 +93,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -92,6 +102,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.domain.ailabels.AiLabelTaskLoader.CLASSPATH_DIRECTORY;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.assertVectors;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.doneStatus;
+import static com.comet.opik.domain.topics.TopicVectorsFixtures.expectedVector;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.expectedVectors;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.outputLabel;
 import static com.comet.opik.domain.topics.TopicVectorsFixtures.rawVector;
@@ -108,6 +119,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * The topic vectors tick against real ClickHouse, MySQL and Redis, with opik-inference's {@code /v1/embed} stubbed in
@@ -180,13 +202,32 @@ class TopicVectorsTickTest {
     private TopicsConfig.VectorsConfig defaults;
     private GuiceJobManager jobManager;
     private EventBus eventBus;
+    private TopicRunStore store;
+    private TopicEmbedder embedder;
+    private TopicAlgorithm algorithm;
+    private AiLabelTaskRegistry taskRegistry;
+    private TopicVectorWriter writer;
+    private TopicVectorBackfiller backfiller;
+    private TopicVectorsMetrics vectorsMetrics;
+    private LongReadRetry longReadRetry;
 
     @BeforeAll
     void beforeAll(OpikConfiguration opikConfig, TransactionTemplate template, TransactionTemplateAsync templateAsync,
             @Jit TopicVectorsTickService tickService, @Jit TopicVectorsDAO vectorsDAO,
             @Jit AiLabelStatusDAO statusDAO, @Jit AiLabelsDAO labelsDAO,
             @Jit TopicWorkspaceService workspaceService, @Jit LockService lockService,
-            @Jit TopicVectorBackfillService backfillService, GuiceJobManager jobManager, EventBus eventBus) {
+            @Jit TopicVectorBackfillService backfillService, GuiceJobManager jobManager, EventBus eventBus,
+            @Jit TopicRunStore store, @Jit TopicAlgorithm algorithm, @Jit AiLabelTaskRegistry taskRegistry,
+            @Jit TopicVectorWriter writer, @Jit TopicVectorBackfiller backfiller,
+            @Jit TopicVectorsMetrics vectorsMetrics, @Jit LongReadRetry longReadRetry, @Jit TopicEmbedder embedder) {
+        this.store = store;
+        this.embedder = embedder;
+        this.algorithm = algorithm;
+        this.taskRegistry = taskRegistry;
+        this.writer = writer;
+        this.backfiller = backfiller;
+        this.vectorsMetrics = vectorsMetrics;
+        this.longReadRetry = longReadRetry;
         this.opikConfig = opikConfig;
         this.template = template;
         this.templateAsync = templateAsync;
@@ -233,8 +274,6 @@ class TopicVectorsTickTest {
         wireMock.resetAll();
         wireMock.stubFor(post(urlEqualTo(EMBED_PATH)).willReturn(aResponse().withTransformers(EmbedStub.NAME)));
         embedStub.reset();
-        // Every tick a short one unless a test makes the long-window pass due: the first tick of a run would run it.
-        lockService.lockUsingToken(LongWindowPass.LOCK, Duration.ofHours(1)).block();
     }
 
     @AfterEach
@@ -245,6 +284,7 @@ class TopicVectorsTickTest {
         config().setMaxTracesPerTick(defaults.getMaxTracesPerTick());
         config().setTickInterval(defaults.getTickInterval());
         config().setEmbedConcurrency(defaults.getEmbedConcurrency());
+        opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(5));
     }
 
     @Test
@@ -330,13 +370,14 @@ class TopicVectorsTickTest {
         assertThat(tables.vectors(workspaceId, List.of(traceId))).isEmpty();
 
         makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(TickResult.builder().written(1).skipped(Map.of()).longWindowPass(true).build());
+        assertThat(tick()).isEqualTo(TickResult.written(1));
         assertVectors(tables.vectors(workspaceId, List.of(traceId)),
                 List.of(vector(workspaceId, projectId, traceId, 1)));
     }
 
     @Test
-    @DisplayName("the daily long-window pass stays on while its ticks reach the cap, and stops once one finds fewer")
+    @DisplayName("a workspace's long read that reaches the cap is tried again after one fresh read, until one finds "
+            + "fewer; then it is not due for longWindowInterval")
     void longWindowUntilDrained() {
         config().setMaxTracesPerTick(2);
         var workspaceId = enabledWorkspace();
@@ -350,33 +391,31 @@ class TopicVectorsTickTest {
             tables.insertStatusAt(workspaceId, projectId, traceIds.get(i), 1,
                     Instant.now().minus(2, ChronoUnit.DAYS).plusSeconds(i));
         }
-        // An undrained pass is due again after one short tick (1.5 tick intervals): wait for each pass tick.
         config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
+        // A fresh tick first gives the workspace its watermark row; every status is older than its short window.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
         makeLongWindowPassDue();
         var ticks = new ArrayList<TickResult>();
         for (int pass = 0; pass < 3; pass++) {
-            var result = new AtomicReference<TickResult>();
-            Awaitility.await().atMost(20, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(200))
-                    .until(() -> {
-                        result.set(tick());
-                        return result.get().longWindowPass();
-                    });
-            ticks.add(result.get());
+            if (pass > 0) {
+                waitForRetryKeys();
+            }
+            ticks.add(tick());
+            ticks.add(tick());
         }
-        // Drained: not due again for longWindowInterval.
-        ticks.add(tick());
 
-        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
-        assertThat(ticks).containsExactly(passTick.written(2).build(), passTick.written(2).build(),
-                passTick.written(1).build(), TickResult.EMPTY);
+        // Long, fresh (its retry key), long, fresh, long (drained), and then not due.
+        assertThat(ticks).containsExactly(TickResult.written(2), TickResult.EMPTY, TickResult.written(2),
+                TickResult.EMPTY, TickResult.written(1), TickResult.EMPTY);
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     @Test
-    @DisplayName("a long-window pass that takes two ticks reads each workspace's long window once: the second tick "
-            + "reads only the workspace the first left at the cap, and drains the pass")
+    @DisplayName("a workspace whose long read does not finish tries again by itself: the workspace whose long read "
+            + "finished is not read again for longWindowInterval")
     void longWindowAcrossTicks() {
         config().setMaxTracesPerTick(2);
+        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
         var capped = enabledWorkspace();
         var cappedProject = ID_GENERATOR.generateId();
         var read = enabledWorkspace();
@@ -386,23 +425,74 @@ class TopicVectorsTickTest {
         markDrained(read, readProject);
         var cappedTraces = oldStatuses(capped, cappedProject, 3);
         var readTraces = oldStatuses(read, readProject, 1);
-        // A short tick first: the pass's progress is kept on the watermark rows a fresh read creates.
+        // A short tick first: the daily pass's marks are kept on the watermark rows a fresh read creates.
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         makeLongWindowPassDue();
-        var passTick = TickResult.builder().skipped(Map.of()).longWindowPass(true);
-        assertThat(tick()).isEqualTo(passTick.written(3).build());
+        assertThat(tick()).isEqualTo(TickResult.written(3));
 
         // Found only by a long read of the workspace the first tick already read in full.
         var lateTraces = oldStatuses(read, readProject, 1);
-        makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(passTick.written(1).build());
-        // Drained: not due again for longWindowInterval.
+        // The capped workspace's fresh read while its retry key lasts, then its long read again; the other is not due.
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        waitForRetryKeys();
+        assertThat(tick()).isEqualTo(TickResult.written(1));
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
 
         assertVectors(tables.vectors(capped, cappedTraces), expectedVectors(capped, cappedProject, cappedTraces, 1));
         assertVectors(tables.vectors(read, readTraces), expectedVectors(read, readProject, readTraces, 1));
         assertThat(tables.vectors(read, lateTraces)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("during a rolling deploy, the old pods' cluster-wide long-window key does not stop a due workspace's "
+            + "long read, and the tick does not set that key, so an old pod still finds its pass due")
+    void longWindowWithTheOldPodsKey() {
+        config().setMaxTracesPerTick(1);
+        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        markDrained(workspaceId, projectId);
+        var traceIds = oldStatuses(workspaceId, projectId, 2);
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        var oldPodsKey = new LockService.Lock("topics:vectors:long_window");
+        // An old pod's pass ran a moment ago: the key says not due.
+        lockService.lockUsingToken(oldPodsKey, Duration.ofHours(1)).block();
+
+        makeLongWindowPassDue();
+        // At the cap: the long read does not finish and sets the workspace's retry key.
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        waitForRetryKeys();
+        assertThat(tick()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
+
+        // Without the old key, as when it expires, an old pod takes it and runs its pass: no tick set it, and the
+        // workspace's retry key, set again by the capped read, is another key.
+        lockService.unlockUsingToken(oldPodsKey).block();
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        assertThat(lockService.lockUsingToken(oldPodsKey, Duration.ofSeconds(1)).block()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the pace of a long read that did not finish survives a change of leader: it is kept in Redis")
+    void longReadRetryAcrossLeaders() {
+        config().setMaxTracesPerTick(2);
+        config().setTickInterval(io.dropwizard.util.Duration.seconds(1));
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        markDrained(workspaceId, projectId);
+        var traceIds = oldStatuses(workspaceId, projectId, 3);
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
+        makeLongWindowPassDue();
+        assertThat(tick()).isEqualTo(TickResult.written(2));
+
+        // A new leader: another tick service on the same Redis and MySQL.
+        var newLeader = tickWith(arrival(InMemoryMetricReader.create()));
+        assertThat(newLeader.tick(Instant.now()).block()).isEqualTo(TickResult.EMPTY);
+        waitForRetryKeys();
+        assertThat(newLeader.tick(Instant.now()).block()).isEqualTo(TickResult.written(1));
+        assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId, traceIds, 1));
     }
 
     /** {@code count} traces with output rows and done statuses written two days ago, older than the short window. */
@@ -534,11 +624,12 @@ class TopicVectorsTickTest {
         labelsDAO.insert(List.of(outputLabel(workspaceId, projectId, traceId, 1))).block();
         // Inside the short window, older than the overlap before the next tick's start.
         tables.insertStatusAt(workspaceId, projectId, traceId, 1, Instant.now().minus(1, ChronoUnit.HOURS));
-        wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
+        var slowName = wireMock.stubFor(get(urlPathEqualTo("/workspaces/workspace-name"))
                 .willReturn(aResponse().withStatus(200).withBody("slow-name").withFixedDelay(6_000)));
 
         assertThat(tick()).isEqualTo(TickResult.EMPTY);
         assertThat(watermark(workspaceId)).isNull();
+        wireMock.removeStub(slowName);
 
         config().setTickBudget(defaults.getTickBudget());
         config().setEmbedTimeout(defaults.getEmbedTimeout());
@@ -719,7 +810,7 @@ class TopicVectorsTickTest {
         assertThat(backfillService.findUndrained(List.of(workspaceId))).isEmpty();
 
         makeLongWindowPassDue();
-        assertThat(tick()).isEqualTo(TickResult.builder().skipped(Map.of()).longWindowPass(true).build());
+        assertThat(tick()).isEqualTo(TickResult.EMPTY);
         assertThat(embedStub.calls.get()).isEqualTo(2);
     }
 
@@ -911,6 +1002,21 @@ class TopicVectorsTickTest {
     }
 
     @Test
+    @DisplayName("a new pod's tick does not discover again a workspace the last pod discovered within "
+            + "longWindowInterval: the discovery mark is read from topic_workspaces")
+    void discoveryMarkAcrossPods() {
+        var workspaceId = enabledWorkspace();
+        labelTraces(workspaceId, 1, 1);
+        tick();
+        var checked = backfillService.findChecked(List.of(workspaceId));
+        assertThat(checked).containsOnlyKeys(workspaceId);
+
+        tickWith(arrival(InMemoryMetricReader.create())).tick(Instant.now()).block();
+
+        assertThat(backfillService.findChecked(List.of(workspaceId))).isEqualTo(checked);
+    }
+
+    @Test
     @DisplayName("a trace deleted while its embed call is in flight, after the cascade found no vector, has no vector "
             + "after the tick; the other trace of the chunk keeps its own")
     void traceDeletedDuringEmbed() {
@@ -935,6 +1041,35 @@ class TopicVectorsTickTest {
 
         assertVectors(tables.vectors(workspaceId, traceIds), expectedVectors(workspaceId, projectId,
                 List.of(traceIds.getLast()), 1));
+    }
+
+    @Test
+    @DisplayName("a trace id two projects of one chunk share, deleted in one of them while its embed call is in "
+            + "flight, has no vector there after the tick; the other project's trace keeps its own")
+    void sharedTraceIdDeletedInOneProjectDuringEmbed() {
+        var workspaceId = enabledWorkspace();
+        var deletedIn = ID_GENERATOR.generateId();
+        var keptIn = ID_GENERATOR.generateId();
+        // Drained projects: both traces are the workspace read's, so they are embedded in one chunk.
+        markDrained(workspaceId, deletedIn);
+        markDrained(workspaceId, keptIn);
+        var traceId = ID_GENERATOR.generateId();
+        label(workspaceId, deletedIn, List.of(traceId), 1);
+        label(workspaceId, keptIn, List.of(traceId), 1);
+        config().setEmbedTimeout(io.dropwizard.util.Duration.seconds(20));
+        embedStub.beforeAnswer = () -> {
+            eventBus.post(new TracesDeleted(Set.of(traceId), deletedIn, workspaceId, "user"));
+            Awaitility.await().atMost(15, TimeUnit.SECONDS).pollInterval(Duration.ofMillis(300))
+                    .until(() -> finishedDeletes(workspaceId, "topic_vector_status") > 0);
+        };
+
+        try {
+            tick();
+        } finally {
+            embedStub.beforeAnswer = null;
+        }
+
+        assertVectors(tables.vectors(workspaceId, List.of(traceId)), List.of(vector(workspaceId, keptIn, traceId, 1)));
     }
 
     private long finishedDeletes(String workspaceId, String table) {
@@ -1069,9 +1204,486 @@ class TopicVectorsTickTest {
         }
     }
 
-    /** Drops the long-window lock, so the next tick runs the pass. */
+    @Nested
+    @DisplayName("topic on arrival")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class Arrival {
+
+        @Test
+        @DisplayName("a trace gets its nearest saved prototype's topic at cosine 0.75 or more, else Other, as an arrival "
+                + "row with no run id")
+        void nearestPrototype() {
+            assertThat(cosine(intent(10), intent(0))).isGreaterThan(0.95);
+            assertThat(cosine(intent(340), intent(333))).isGreaterThan(0.95);
+            assertThat(cosine(intent(667), intent(0))).isLessThan(0.75);
+            assertThat(cosine(intent(667), intent(333))).isLessThan(0.75);
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter));
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            var refunds = topic(workspaceId, projectId, 1, intent(333));
+            saveList(workspaceId, projectId, List.of(billing, refunds), null);
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(10), intent(340), intent(667)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(3);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(arrivalRows(workspaceId, projectId))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), billing.id(),
+                            traceIds.get(1), refunds.id(),
+                            traceIds.get(2), TraceTopic.OTHER)));
+            // The tick's own name lookup: in tests the name is the id.
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
+                    workspaceId,
+                    "workspace_name", workspaceId)).isEqualTo(2);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "other", "workspace_id",
+                    workspaceId))
+                    .isEqualTo(1);
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.duration_seconds")).isNotEmpty()
+                    .allSatisfy(point -> assertThat(point.get("workspace_id")).isEqualTo(workspaceId));
+        }
+
+        @Test
+        @DisplayName("a project with no saved list, or a saved list with known-Other vectors only, gets no rows, and its "
+                + "traces count as no_prototypes")
+        void noTopics() {
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter));
+            var workspaceId = enabledWorkspace();
+            var noList = ID_GENERATOR.generateId();
+            var otherOnly = ID_GENERATOR.generateId();
+            saveList(workspaceId, otherOnly, List.of(), others(intent(0)));
+            labelIntents(workspaceId, noList, List.of(intent(0), intent(5), intent(10)));
+            labelIntents(workspaceId, otherOnly, List.of(intent(0), intent(5)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(5);
+
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "no_prototypes",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(5);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic")).isZero();
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a known-Other vector within cosine 0.95 of a topic prototype is gated; one farther takes its "
+                + "traces to Other")
+        void otherGate() {
+            assertThat(cosine(intent(1), intent(0))).isGreaterThanOrEqualTo(0.95);
+            assertThat(cosine(intent(150), intent(0))).isBetween(0.75, 0.95);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            saveList(workspaceId, projectId, List.of(billing), others(intent(1), intent(150)));
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(1), intent(150)));
+
+            assertThat(tickService.tick(Instant.now()).block().written()).isEqualTo(2);
+
+            assertThat(arrivalRows(workspaceId, projectId))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), billing.id(),
+                            traceIds.get(1), TraceTopic.OTHER)));
+        }
+
+        @Test
+        @DisplayName("a workspace listed below the arrival stage gets its vectors and no arrival row; one listed at it "
+                + "gets both")
+        void stageBelowArrival() {
+            var below = enabledWorkspace();
+            var at = enabledWorkspace();
+            var topics = opikConfig.getTopics();
+            topics.setEnabledWorkspaces("%s:%s,%s:%s".formatted(below, TopicsStage.VECTORS.configName(), at,
+                    TopicsStage.ARRIVAL.configName()));
+            var belowProject = ID_GENERATOR.generateId();
+            var atProject = ID_GENERATOR.generateId();
+            var belowTopic = topic(below, belowProject, 0, intent(0));
+            var atTopic = topic(at, atProject, 0, intent(0));
+            saveList(below, belowProject, List.of(belowTopic), null);
+            saveList(at, atProject, List.of(atTopic), null);
+            var belowTraces = labelIntents(below, belowProject, List.of(intent(0), intent(5)));
+            var atTraces = labelIntents(at, atProject, List.of(intent(0), intent(5)));
+
+            assertThat(tickService.tick(Instant.now()).block().written()).isEqualTo(4);
+
+            assertThat(tables.vectors(below, belowTraces)).hasSize(2);
+            assertThat(tables.vectors(at, atTraces)).hasSize(2);
+            assertThat(countTraceTopicRows(below)).isZero();
+            assertThat(arrivalRows(at, atProject))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(at, atProject, Map.of(
+                            atTraces.get(0), atTopic.id(),
+                            atTraces.get(1), atTopic.id())));
+        }
+
+        @Test
+        @DisplayName("a failed read of the arrival stages writes no arrival row that tick; the vectors go on")
+        void stageReadFails() {
+            var failing = spy(workspaceService);
+            doThrow(new IllegalStateException("stages down")).when(failing)
+                    .enabledWorkspaceIds(TopicsStage.ARRIVAL);
+            var tick = tickWith(arrival(InMemoryMetricReader.create()), failing);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(2);
+
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(2);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+        }
+
+        @Test
+        @DisplayName("each tick reads the saved lists again: a list saved between two ticks labels the second tick's "
+                + "traces, and no trace gets a second row")
+        void secondTick() {
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter));
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var first = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(500)));
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            saveList(workspaceId, projectId, List.of(billing), null);
+            var second = labelIntents(workspaceId, projectId, List.of(intent(1), intent(2)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(2);
+
+            assertThat(arrivalRows(workspaceId, projectId))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            second.get(0), billing.id(),
+                            second.get(1), billing.id())));
+            assertThat(countTraceTopicRows(workspaceId)).isEqualTo(2);
+            assertThat(first).doesNotContainAnyElementsOf(second);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "no_prototypes",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(3);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"read", "insert", "assign"})
+        @DisplayName("a failing step (the saved lists read, the trace_topics insert, or anything else) leaves the "
+                + "vectors written and the tick's counts as they were; it is counted once by phase and error type, and "
+                + "arrival stops for the workspace for the rest of the tick")
+        void failingStep(String phase) {
+            var failingRead = storeWith(spied -> doReturn(Mono.error(new IllegalStateException("mysql down")))
+                    .when(spied).readSavedLists(any(), any()));
+            var failingInsert = storeWith(spied -> doReturn(Mono.error(new IllegalStateException("trace_topics down")))
+                    .when(spied).insertTraceTopics(any(), any()));
+            var failingAlgorithm = mock(TopicAlgorithm.class);
+            when(failingAlgorithm.labeller(any(), any())).thenReturn(vectors -> {
+                throw new IllegalStateException("rule broken");
+            });
+            var meter = InMemoryMetricReader.create();
+            var arrival = switch (phase) {
+                case "read" -> arrival(meter, failingRead, algorithm);
+                case "insert" -> arrival(meter, failingInsert, algorithm);
+                default -> arrival(meter, store, failingAlgorithm);
+            };
+            var tick = tickWith(arrival);
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+            // The lists read, the labelling and the insert run once, after the read's last chunk, so any failure leaves
+            // all 5 written traces without a row. After a failed lists read, the labelling counts them as after_failure;
+            // a failed labelling or insert is the step's own failure.
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, phase, "IllegalStateException"));
+            switch (phase) {
+                case "read" -> verify(failingRead, times(1)).readSavedLists(any(), any());
+                case "insert" -> verify(failingInsert, times(1)).insertTraceTopics(any(), any());
+                default -> verify(failingAlgorithm, times(1)).labeller(any(), any());
+            }
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(phase.equals("read") ? 5 : 0);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic")).isZero();
+        }
+
+        @Test
+        @DisplayName("a trace_topics insert that hangs is cut at topics.arrival.timeout; the vectors stay written, it "
+                + "counts as a TimeoutException, and the tick does not wait for it")
+        void slowInsert() {
+            var hanging = storeWith(spied -> doReturn(Mono.never()).when(spied).insertTraceTopics(any(), any()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, hanging, algorithm));
+            // 2s: the step's real MySQL read takes a small share of it, even on a slow machine.
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
+            // The read's one insert, after its last chunk, is cut about 2s after the lists read started.
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, "insert", "TimeoutException"));
+            verify(hanging, times(1)).insertTraceTopics(any(), any());
+            // The lists read's step and the cut labelling step.
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.duration_seconds")).isBetween(1.8, 5.0);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+        }
+
+        @Test
+        @DisplayName("a read whose later chunk fails to insert its vectors still labels the chunks written before and "
+                + "after it, in one insert; the failed chunk's traces count as insert_failed and get no row")
+        void laterChunkFails() {
+            var failingDAO = spy(vectorsDAO);
+            doCallRealMethod().doReturn(Mono.error(new IllegalStateException("topic_vectors down")))
+                    .doCallRealMethod().when(failingDAO).insert(any());
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter), workspaceService, failingDAO);
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            saveList(workspaceId, projectId, List.of(billing), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(1), intent(2), intent(3), intent(4)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            // Chunks of 2: the second chunk's vectors insert fails.
+            assertThat(result.written()).isEqualTo(3);
+            assertThat(result.skipped()).isEqualTo(Map.of(SkipReason.INSERT_FAILED, 2));
+            var written = tables.vectors(workspaceId, traceIds).stream().map(TopicVector::traceId).toList();
+            assertThat(written).hasSize(3);
+            assertThat(arrivalRows(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(expectedArrivalRows(
+                    workspaceId, projectId, written.stream().collect(Collectors.toMap(id -> id, id -> billing.id()))));
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a saved lists read that hangs is cut at topics.arrival.timeout as a TimeoutException; arrival "
+                + "reads nothing more in the tick")
+        void slowRead() {
+            var hanging = storeWith(spied -> doReturn(Mono.never()).when(spied).readSavedLists(any(), any()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, hanging, algorithm));
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(1));
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(5), intent(10), intent(500), intent(667)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(5);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(5);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures"))
+                    .containsExactly(failure(workspaceId, "read", "TimeoutException"));
+            verify(hanging, times(1)).readSavedLists(any(), any());
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.duration_seconds")).singleElement()
+                    .satisfies(point -> assertThat(point.value()).isLessThan(3.0));
+            // The lists read runs after the read's chunks: its failure leaves all 5 written traces without a row.
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "after_failure",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("a slow trace_topics insert that still answers within topics.arrival.timeout writes the rows of "
+                + "all the read's chunks in one insert")
+        void slowButWorkingInsert() {
+            var slow = storeWith(spied -> doAnswer(invocation -> Mono.delay(Duration.ofMillis(1_100)).then(
+                    store.insertTraceTopics(invocation.getArgument(0), invocation.getArgument(1))))
+                    .when(spied).insertTraceTopics(any(), any()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, slow, algorithm));
+            // 3s in all: the read's one insert of about 1.1s fits.
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(3));
+            config().setEmbedBatchSize(2);
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+            var traceIds = labelIntents(workspaceId, projectId,
+                    List.of(intent(0), intent(5), intent(10), intent(15), intent(20), intent(25)));
+
+            var result = tick.tick(Instant.now()).block();
+
+            assertThat(result.written()).isEqualTo(6);
+            assertThat(result.skipped()).isEmpty();
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(6);
+            verify(slow, times(1)).insertTraceTopics(any(), any());
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic", "workspace_id",
+                    workspaceId))
+                    .isEqualTo(6);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
+                    "workspace_id", workspaceId))
+                    .isZero();
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("topics.arrival.timeout is each workspace's: the time one workspace's steps take leaves another "
+                + "workspace's budget whole")
+        void timeoutPerWorkspace() {
+            var slow = storeWith(spied -> doAnswer(invocation -> Mono.delay(Duration.ofMillis(1_100)).then(
+                    store.insertTraceTopics(invocation.getArgument(0), invocation.getArgument(1))))
+                    .when(spied).insertTraceTopics(any(), any()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, slow, algorithm));
+            // 2s per workspace: its one insert of about 1.1s fits. A budget shared by the tick would leave the second
+            // workspace about 0.9s, under the 1s minStepTime.
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
+            config().setEmbedBatchSize(2);
+            // One workspace after the other, so a budget shared by the tick would leave the second one nothing.
+            config().setEmbedConcurrency(1);
+            var workspaceIds = List.of(enabledWorkspace(), enabledWorkspace());
+            for (var workspaceId : workspaceIds) {
+                var projectId = ID_GENERATOR.generateId();
+                saveList(workspaceId, projectId, List.of(topic(workspaceId, projectId, 0, intent(0))), null);
+                labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10), intent(15)));
+            }
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(8);
+
+            for (var workspaceId : workspaceIds) {
+                assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "topic",
+                        "workspace_id", workspaceId))
+                        .isEqualTo(4);
+                assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
+                        "workspace_id", workspaceId))
+                        .isZero();
+            }
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("with less than topics.arrival.minStepTime left after the read, the labelling step does not "
+                + "start: its traces count as over_budget and get no row")
+        void lessThanAStepLeftAfterTheRead() {
+            var slowRead = storeWith(spied -> doAnswer(invocation -> Mono.delay(Duration.ofMillis(1_300)).then(
+                    store.readSavedLists(invocation.getArgument(0), invocation.getArgument(1))))
+                    .when(spied).readSavedLists(any(), any()));
+            var meter = InMemoryMetricReader.create();
+            var tick = tickWith(arrival(meter, slowRead, algorithm));
+            // 2s in all: the read takes about 1.3s, so about 0.7s is left, under the 1s minStepTime.
+            opikConfig.getTopics().getArrival().setTimeout(io.dropwizard.util.Duration.seconds(2));
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var billing = topic(workspaceId, projectId, 0, intent(0));
+            saveList(workspaceId, projectId, List.of(billing), null);
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(5), intent(10)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
+
+            assertThat(tables.vectors(workspaceId, traceIds)).hasSize(3);
+            assertThat(countTraceTopicRows(workspaceId)).isZero();
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(3);
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("arrival writes what the bound algorithm's labeller returns, made from the project's saved topics "
+                + "and known-Other vectors, and builds no rule of its own")
+        void anotherAlgorithm() {
+            var topicId = ID_GENERATOR.generateId();
+            var otherAlgorithm = mock(TopicAlgorithm.class);
+            when(otherAlgorithm.labeller(any(), any())).thenReturn(vectors -> {
+                var topics = new UUID[vectors.size()];
+                Arrays.fill(topics, topicId);
+                return topics;
+            });
+            var tick = tickWith(arrival(InMemoryMetricReader.create(), store, otherAlgorithm));
+            var workspaceId = enabledWorkspace();
+            var projectId = ID_GENERATOR.generateId();
+            var older = topic(workspaceId, projectId, 0, intent(0));
+            var newer = topic(workspaceId, projectId, 1, intent(250));
+            var otherVectors = others(intent(500));
+            saveList(workspaceId, projectId, List.of(newer, older), otherVectors);
+            var traceIds = labelIntents(workspaceId, projectId, List.of(intent(0), intent(250), intent(667)));
+
+            assertThat(tick.tick(Instant.now()).block().written()).isEqualTo(3);
+
+            assertThat(arrivalRows(workspaceId, projectId))
+                    .containsExactlyInAnyOrderElementsOf(expectedArrivalRows(workspaceId, projectId, Map.of(
+                            traceIds.get(0), topicId,
+                            traceIds.get(1), topicId,
+                            traceIds.get(2), topicId)));
+            // The labeller gets the project's topics as saved, in (born, id) order, and its known-Other vectors.
+            verify(otherAlgorithm).labeller(List.of(older, newer), otherVectors);
+        }
+
+        @Test
+        @DisplayName("with less than a second left before the tick's deadline, arrival reads and writes nothing and "
+                + "counts its traces as over_budget")
+        void overBudget() {
+            var noStore = mock(TopicRunStore.class);
+            var noAlgorithm = mock(TopicAlgorithm.class);
+            var meter = InMemoryMetricReader.create();
+            var arrival = arrival(meter, noStore, noAlgorithm);
+            var workspaceId = ID_GENERATOR.generateId().toString();
+            var vectors = IntStream.range(0, 3)
+                    .mapToObj(i -> TopicVector.builder()
+                            .workspaceId(workspaceId)
+                            .projectId(ID_GENERATOR.generateId())
+                            .task(TopicEmbedding.SUMMARY_TASK)
+                            .traceId(ID_GENERATOR.generateId())
+                            .traceCreatedAt(Instant.now())
+                            .taskVersion(1)
+                            .embedModel(TopicEmbedding.MODEL)
+                            .embedDimensions(TopicEmbedding.DIMENSIONS)
+                            .text(intent(i))
+                            .vector(expectedVector(intent(i)))
+                            .build())
+                    .toList();
+
+            var workspace = TopicVectorsMetrics.Workspace.unnamed(workspaceId);
+            var budget = TickBudget.of(Instant.now(), Duration.ofMillis(500), Clock.systemUTC());
+            var projectIds = vectors.stream().map(TopicVector::projectId).toList();
+
+            var steps = arrival.loadLabellers(workspace, projectIds, budget, ArrivalSteps.STARTED)
+                    .flatMap(read -> arrival.label(workspace, vectors, budget, read)).block();
+
+            assertThat(steps).isEqualTo(ArrivalSteps.STARTED);
+            verifyNoInteractions(noStore, noAlgorithm);
+            assertThat(TopicsMetricsReader.sum(meter, "topics.arrival.labelled", "outcome", "over_budget",
+                    "workspace_id", workspaceId))
+                    .isEqualTo(3);
+            assertThat(TopicsMetricsReader.points(meter, "topics.arrival.failures")).isEmpty();
+        }
+    }
+
+    /** With a 1s tick interval, the retry keys last 1.5s from their tick's start. */
+    private static void waitForRetryKeys() {
+        Awaitility.await().pollDelay(Duration.ofMillis(1_600)).atMost(5, TimeUnit.SECONDS).until(() -> true);
+    }
+
+    /** Clears every workspace's daily pass mark: each with a watermark row reads its long window next tick. */
     private void makeLongWindowPassDue() {
-        lockService.unlockUsingToken(LongWindowPass.LOCK).block();
+        template.inTransaction(WRITE, handle -> {
+            handle.execute("UPDATE topic_vector_watermarks SET long_window_read_at = NULL");
+            return null;
+        });
     }
 
     /** Gives the project a drained backfill row, as a project whose backfill ended earlier has. */
@@ -1168,6 +1780,176 @@ class TopicVectorsTickTest {
                         .bind("workspace_id", workspaceId)
                         .execute())
                 .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("cnt", Long.class)))))
+                .block();
+    }
+
+    private TopicsArrivalService arrival(InMemoryMetricReader meter) {
+        return arrival(meter, store, algorithm);
+    }
+
+    private TopicsArrivalService arrival(InMemoryMetricReader meter, TopicRunStore runStore,
+            TopicAlgorithm labelling) {
+        return new TopicsArrivalService(opikConfig.getTopics(), runStore, labelling,
+                new TopicsArrivalMetrics(TopicsMetricsReader.meter(meter)));
+    }
+
+    /** The tick as Guice builds it, with {@code arrival} in place of the bound arrival service. */
+    private TopicVectorsTickService tickWith(TopicsArrivalService arrival) {
+        return tickWith(arrival, workspaceService);
+    }
+
+    private TopicVectorsTickService tickWith(TopicsArrivalService arrival, TopicWorkspaceService workspaces) {
+        return tickWith(arrival, workspaces, vectorsDAO);
+    }
+
+    /** The tick with its own arrival and workspaces, and a writer that inserts vectors through {@code writerDAO}. */
+    private TopicVectorsTickService tickWith(TopicsArrivalService arrival, TopicWorkspaceService workspaces,
+            TopicVectorsDAO writerDAO) {
+        var arrivalWriter = new TopicVectorWriter(writerDAO, embedder, vectorsMetrics, arrival);
+        var arrivalBackfiller = new TopicVectorBackfiller(opikConfig.getTopics(), vectorsDAO, backfillService,
+                arrivalWriter, vectorsMetrics);
+        return new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaces,
+                vectorsDAO, taskRegistry, arrivalWriter,
+                new TopicVectorDiscovery(opikConfig.getTopics(), vectorsDAO, backfillService, vectorsMetrics),
+                arrivalBackfiller, vectorsMetrics, longReadRetry);
+    }
+
+    /** One failed arrival step of the workspace, as {@code topics.arrival.failures} records it. */
+    private static TopicsMetricsReader.Point failure(String workspaceId, String phase, String errorType) {
+        return new TopicsMetricsReader.Point(1, Attributes.builder()
+                .put("workspace_id", workspaceId)
+                .put("workspace_name", workspaceId)
+                .put("phase", phase)
+                .put("error_type", errorType)
+                .build());
+    }
+
+    /** The bound store, with one method answered by {@code answer}. */
+    private TopicRunStore storeWith(Consumer<TopicRunStore> stub) {
+        var spied = spy(store);
+        stub.accept(spied);
+        return spied;
+    }
+
+    /**
+     * A summary whose stub vector sits at {@code offset} (0 to 999) on a cycle: {@link TopicVectorsFixtures#rawVector}
+     * depends only on the text's hash modulo 1,000, and these texts differ only in their last char, so their hashes
+     * differ by the offsets. The cosine of two of them depends only on the distance of their offsets around the cycle.
+     */
+    private static String intent(int offset) {
+        return "intent " + (char) ('一' + offset);
+    }
+
+    private static double cosine(String first, String second) {
+        var a = expectedVector(first);
+        var b = expectedVector(second);
+        double sum = 0;
+        for (int i = 0; i < a.length; i++) {
+            sum += (double) a[i] * b[i];
+        }
+        return sum;
+    }
+
+    /** One trace per text, labeled with the text as its summary. */
+    private List<UUID> labelIntents(String workspaceId, UUID projectId, List<String> texts) {
+        tables.project(workspaceId, projectId);
+        var traceIds = texts.stream().map(text -> ID_GENERATOR.generateId()).toList();
+        labelsDAO.insert(IntStream.range(0, texts.size())
+                .mapToObj(i -> outputLabel(workspaceId, projectId, traceIds.get(i), 1, texts.get(i)))
+                .toList()).block();
+        statusDAO.insert(traceIds.stream().map(traceId -> doneStatus(workspaceId, projectId, traceId, 1)).toList())
+                .block();
+        return traceIds;
+    }
+
+    /** A live topic with one prototype at the stub vector of {@code text}, born {@code night} days after 2026-01-01. */
+    private static Topic topic(String workspaceId, UUID projectId, int night, String text) {
+        return Topic.builder()
+                .id(ID_GENERATOR.generateId())
+                .workspaceId(workspaceId)
+                .projectId(projectId)
+                .name("topic " + night)
+                .definition("Requests near " + text)
+                .born(LocalDate.of(2026, 1, 1).plusDays(night))
+                .size(10)
+                .vectors(new PrototypeVectors(List.of(expectedVector(text))))
+                .build();
+    }
+
+    /** Known-Other prototype vectors at the stub vectors of {@code texts}. */
+    private static PrototypeVectors others(String... texts) {
+        return new PrototypeVectors(Arrays.stream(texts).map(TopicVectorsFixtures::expectedVector).toList());
+    }
+
+    /** Saves a discovery run's list for the project, as the run's save writes it: all arrival reads of a list. */
+    private void saveList(String workspaceId, UUID projectId, List<Topic> topics, PrototypeVectors otherVectors) {
+        var runId = ID_GENERATOR.generateId();
+        var savedAt = Instant.now();
+        template.inTransaction(WRITE, handle -> {
+            var runDAO = handle.attach(TopicProjectDAO.class);
+            var topicDAO = handle.attach(TopicDAO.class);
+            TopicsTestData.startRun(runDAO, workspaceId, projectId, runId, TopicProject.RunMode.DISCOVERY, savedAt);
+            runDAO.saveList(workspaceId, projectId, null, runId, savedAt, savedAt, otherVectors, TopicEmbedding.MODEL);
+            if (!topics.isEmpty()) {
+                topicDAO.insertTopics(topics);
+            }
+            runDAO.markSaved(workspaceId, projectId, runId, savedAt);
+            return null;
+        });
+    }
+
+    /** The latest {@code trace_topics} row of each trace of the project, a run's row winning a tie. */
+    private List<TraceTopic> arrivalRows(String workspaceId, UUID projectId) {
+        return templateAsync.nonTransaction(connection -> Flux.from(connection.createStatement("""
+                SELECT trace_id, trace_created_at, topic_id, source, run_id
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id AND project_id = :project_id
+                ORDER BY trace_id, last_updated_at DESC, source = 'run' DESC
+                LIMIT 1 BY trace_id
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .execute())
+                .flatMap(result -> result.map((row, metadata) -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                        .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                        .topicId(UUID.fromString(row.get("topic_id", String.class)))
+                        .source(source(row.get("source", String.class)))
+                        .runId(Optional.ofNullable(row.get("run_id", String.class)).map(UUID::fromString)
+                                .orElse(null))
+                        .build()))
+                .collectList())
+                .block();
+    }
+
+    private static TraceTopic.Source source(String value) {
+        return Arrays.stream(TraceTopic.Source.values()).filter(source -> source.getValue().equals(value))
+                .findFirst().orElseThrow();
+    }
+
+    /** The arrival row of each trace, with the trace's created time as its vector holds it. */
+    private List<TraceTopic> expectedArrivalRows(String workspaceId, UUID projectId, Map<UUID, UUID> topicOfTrace) {
+        return tables.vectors(workspaceId, List.copyOf(topicOfTrace.keySet())).stream()
+                .map(vector -> TraceTopic.builder()
+                        .workspaceId(workspaceId)
+                        .projectId(projectId)
+                        .traceId(vector.traceId())
+                        .traceCreatedAt(vector.traceCreatedAt())
+                        .topicId(topicOfTrace.get(vector.traceId()))
+                        .source(TraceTopic.Source.ARRIVAL)
+                        .runId(null)
+                        .build())
+                .toList();
+    }
+
+    private long countTraceTopicRows(String workspaceId) {
+        return templateAsync.nonTransaction(connection -> Mono.from(connection.createStatement(
+                "SELECT count() AS rows FROM trace_topics WHERE workspace_id = :workspace_id")
+                .bind("workspace_id", workspaceId)
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("rows", Long.class)))))
                 .block();
     }
 

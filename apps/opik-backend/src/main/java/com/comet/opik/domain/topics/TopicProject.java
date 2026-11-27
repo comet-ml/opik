@@ -17,7 +17,7 @@ import java.util.UUID;
  * logs itself and emits metrics instead. The vectors tick creates the row when it first sees the project, a discovery
  * run when it first starts one. Each group of fields is null, 0 or false until its writer first writes it, and each
  * writer updates its own group: the vectors tick the backfill fields, a run the attempt fields ({@code run*},
- * {@code failedRuns}, {@code firstFailedAt}), the save the list fields ({@code savedRuns} to {@code embedModel}),
+ * {@code failedRuns}, {@code firstFailedAt}, {@code lastFailedAt}), the save the list fields ({@code savedRuns} to {@code embedModel}),
  * the night {@code lastNight} and {@code notReachedNights}. For the backfill, ClickHouse stays the only source of
  * which traces have no vector.
  *
@@ -51,6 +51,7 @@ import java.util.UUID;
  * @param runErrorCode why the attempt failed, null unless it did
  * @param failedRuns the failed attempts since the last saved one
  * @param firstFailedAt the start of the first of them
+ * @param lastFailedAt when the last of them failed; a labelling pass does not change it
  * @param lastNight the last night that looked at the project
  * @param notReachedNights the nights in a row whose budget ended before the project
  */
@@ -83,6 +84,7 @@ public record TopicProject(
         @Nullable RunError runErrorCode,
         int failedRuns,
         @Nullable Instant firstFailedAt,
+        @Nullable Instant lastFailedAt,
         @Nullable LocalDate lastNight,
         int notReachedNights) {
 

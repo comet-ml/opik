@@ -6,9 +6,11 @@ from json.decoder import JSONDecodeError
 from ..core.api_error import ApiError
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.http_response import AsyncHttpResponse, HttpResponse
+from ..core.jsonable_encoder import jsonable_encoder
 from ..core.pydantic_utilities import parse_obj_as
 from ..core.request_options import RequestOptions
 from ..errors.bad_request_error import BadRequestError
+from ..errors.conflict_error import ConflictError
 from ..errors.forbidden_error import ForbiddenError
 from ..errors.not_found_error import NotFoundError
 from ..errors.not_implemented_error import NotImplementedError
@@ -21,6 +23,208 @@ from ..types.project_topics import ProjectTopics
 class RawTopicsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def reset_project_topics(
+        self, project_id: str, *, workspace_id: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Deletes the project's topics and clears the list on its topic_projects row, in one transaction, so its next discovery run, planned or by hand, builds a new list. The row's run and vectors backfill state stay. The workspace is opted in to topics at stage build or later, and the project has a topic_projects row and no run in flight.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/reset",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def run_project_topics(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        ignore_backfill: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Queues the project's discovery run and returns its run id; any pod runs it. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The window ends at the start of the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago). The workspace is opted in to topics at stage build or later, the window holds topics.run.minVectors vectors of the project, and the project has no list and no run in flight. The project's vectors backfill must have drained: ignore_backfill=true builds it from the vectors it has so far. A failed discovery run's retry wait and topics.runs.maxInFlight do not apply.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        ignore_backfill : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/run",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+                "night": night,
+                "ignore_backfill": ignore_backfill,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def run_project_topics_night(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/night",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+                "night": night,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_project_topics(
         self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
@@ -144,6 +348,208 @@ class RawTopicsClient:
 class AsyncRawTopicsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def reset_project_topics(
+        self, project_id: str, *, workspace_id: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Deletes the project's topics and clears the list on its topic_projects row, in one transaction, so its next discovery run, planned or by hand, builds a new list. The row's run and vectors backfill state stay. The workspace is opted in to topics at stage build or later, and the project has a topic_projects row and no run in flight.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/reset",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def run_project_topics(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        ignore_backfill: typing.Optional[bool] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Queues the project's discovery run and returns its run id; any pod runs it. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The window ends at the start of the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago). The workspace is opted in to topics at stage build or later, the window holds topics.run.minVectors vectors of the project, and the project has no list and no run in flight. The project's vectors backfill must have drained: ignore_backfill=true builds it from the vectors it has so far. A failed discovery run's retry wait and topics.runs.maxInFlight do not apply.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        ignore_backfill : typing.Optional[bool]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/run",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+                "night": night,
+                "ignore_backfill": ignore_backfill,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def run_project_topics_night(
+        self,
+        project_id: str,
+        *,
+        workspace_id: str,
+        night: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+
+        Parameters
+        ----------
+        project_id : str
+
+        workspace_id : str
+
+        night : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/internal/topics/projects/{jsonable_encoder(project_id)}/night",
+            method="POST",
+            params={
+                "workspace_id": workspace_id,
+                "night": night,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 503:
+                raise ServiceUnavailableError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_project_topics(
         self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None

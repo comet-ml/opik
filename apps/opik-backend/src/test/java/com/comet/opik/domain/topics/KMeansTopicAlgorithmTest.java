@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** The k-means algorithm through its entry points: a discovery run's sizing and author call, and its labeller. */
 @DisplayName("k-means topic algorithm")
@@ -35,6 +36,19 @@ class KMeansTopicAlgorithmTest {
         assertThat(stats.get("unique_texts").asInt()).isEqualTo(uniqueTexts);
         assertThat(stats.get("k").asInt()).isEqualTo(expectedGroups);
         assertThat(stats.get("author_examples").asInt()).isEqualTo(expectedExamples);
+    }
+
+    @Test
+    @DisplayName("a verify budget above the inference service's max_tokens limit stops the start")
+    void verifyBudgetAboveTheLimit() {
+        // The verify task's 60 + 25 per pair x 200 groups is 5060, above the 4096 the service takes.
+        var config = TopicsTestAlgorithm.config();
+        config.setNightlyMaxGroups(200);
+
+        assertThatThrownBy(() -> TopicsTestAlgorithm.algorithm(config))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("5060")
+                .hasMessageContaining("4096");
     }
 
     @Test

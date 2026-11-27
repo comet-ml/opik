@@ -57,6 +57,20 @@ class TestBuildChecklist:
             assert isinstance(match, str)
             assert match.count(":") >= 2
 
+    def test_build_checklist__nested_files__paths_use_forward_slashes(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src" / "pkg").mkdir(parents=True)
+        (tmp_path / "src" / "pkg" / "app.py").write_text("import opik\n")
+
+        result = build_checklist(tmp_path, command=None)
+
+        tree = result["file_tree"].splitlines()
+        assert tree == ["src/", "src/pkg/", "src/pkg/app.py"]
+        assert result["instrumentation_matches"]
+        for match in result["instrumentation_matches"]:
+            assert match.startswith("src/pkg/app.py:")
+
     def test_build_checklist__command_none__serialized_as_none(
         self, tmp_path: Path
     ) -> None:

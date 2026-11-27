@@ -3,6 +3,7 @@ import collections.abc
 import datetime
 import logging
 import os
+import uuid
 
 import httpx
 import functools
@@ -32,6 +33,7 @@ from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants, streaming_upload
+from ..experiment import experiment_item, experiments_client
 from . import (
     dataset_item,
     identifiers,
@@ -733,6 +735,57 @@ class Dataset(DatasetExportOperations):
             dataset_name=self._name, project_name=self._project_name
         )
         return dataset_fern.tags or []
+
+    def get_item_experiment_results(
+        self,
+        item_id: str,
+        dataset_versions: Optional[List[str]] = None,
+        max_results: int = 1000,
+    ) -> List[experiment_item.ExperimentItemContent]:
+        """
+        Returns one item's results across every experiment run on this dataset.
+
+        Use it to see how a single test case scored over time. Each result is one
+        experiment's run of the item, with its ``experiment_id``, feedback scores,
+        output and trace. Results span every version of the item unless
+        ``dataset_versions`` narrows them.
+
+        Args:
+            item_id: The dataset item's id. Must be a UUID.
+            dataset_versions: Dataset version hashes or tags. Only experiments run
+                against one of these versions are included. Defaults to every version.
+            max_results: The maximum number of results to return.
+
+        Returns:
+            List[ExperimentItemContent]: The item's results, one per experiment (one
+            per run when an experiment runs the item more than once). Optimizer trial,
+            mini-batch and mutation experiments are excluded.
+
+        Raises:
+            ValueError: If ``item_id`` is not a UUID.
+            DatasetVersionNotFound: If a version in ``dataset_versions`` does not exist.
+
+        Note:
+            For several items at once, such as every item with a tag, use
+            ``Opik.get_experiments_client().find_experiment_items_for_dataset`` with
+            a ``filter_string`` such as ``'tags contains "team-x"'``.
+        """
+        # Validated before it goes into the filter string, so a stray quote can't
+        # change the filter.
+        try:
+            item_id = str(uuid.UUID(item_id))
+        except (ValueError, AttributeError, TypeError):
+            raise ValueError(f"Item id must be a UUID, got {item_id!r}") from None
+
+        return experiments_client.ExperimentsClient(
+            self._rest_client
+        ).find_experiment_items_for_dataset(
+            dataset_name=self._name,
+            filter_string=f'id = "{item_id}"',
+            project_name=self._project_name,
+            max_results=max_results,
+            dataset_versions=dataset_versions,
+        )
 
     def _deduplicating(
         self, items: Iterable[dataset_item.DatasetItem], deduplication: bool

@@ -598,6 +598,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.2-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LINGSANTE_3_1_AIR_VL,
+      label: "inclusionai/lingsante-3.1-air-vl",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INFERENCE_NET_SCHEMATRON_V2_SMALL,
       label: "inference-net/schematron-v2-small",
     },
@@ -788,6 +792,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONDREAM_MOONDREAM3_1_9B_A2B,
       label: "moondream/moondream3.1-9b-a2b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
+      label: "moonshotai/kimi-k2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_0905,
+      label: "moonshotai/kimi-k2-0905",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_5,
@@ -1459,20 +1471,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "thinkingmachines/inkling-small",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T2_CHIMERA,
+      label: "tngtech/deepseek-r1t2-chimera",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.TYPESAFE_JEV_ROUTER,
       label: "typesafe/jev-router",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_10,
-      label: "unbiased/pareto-26.10",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_10_PREVIEW,
-      label: "unbiased/pareto-26.10-preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO_26_9,
-      label: "unbiased/pareto-26.9",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,

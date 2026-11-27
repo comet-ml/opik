@@ -73,6 +73,68 @@ ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC
 LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 ```
 
+## Removing rows of deleted traces
+
+Before the tick checked for deleted traces, a trace deleted while its jobs were in flight could keep its
+`ai_labels` and `ai_label_status` rows. The Topics vectors tick could then write `topic_vectors` and
+`topic_vector_status` rows for it, and a topic could be assigned to its vector in `trace_topics`. The steps below
+delete those rows once, one weekly partition at a time: every statement reads one partition of the table it cleans,
+and only the `traces` rows of the trace ids in it, from the same week of `traces`. The five tables and `traces` take
+their week from the trace id, so a trace and its rows are always in the same week. Do not run them while a `traces` cutover or backfill is in
+progress, when `traces` can miss rows that are live.
+
+1. List the workspaces and the weeks (partitions) that have rows in any of the five tables:
+
+   ```sql
+   SELECT DISTINCT workspace_id FROM (
+     SELECT workspace_id FROM ai_labels UNION ALL SELECT workspace_id FROM ai_label_status
+     UNION ALL SELECT workspace_id FROM topic_vectors UNION ALL SELECT workspace_id FROM topic_vector_status
+     UNION ALL SELECT workspace_id FROM trace_topics)
+   ORDER BY workspace_id;
+   SELECT DISTINCT partition FROM system.parts
+   WHERE database = currentDatabase() AND active
+     AND table IN ('ai_labels', 'ai_label_status', 'topic_vectors', 'topic_vector_status', 'trace_topics')
+   ORDER BY partition;
+   ```
+
+2. For one week, count the rows to delete. Put the week (for example `20261116`) in `<week>`, the quoted
+   workspace ids (`'a', 'b'`) in `<workspace_ids>`, and the table in `<table>`. Run it for `ai_labels`,
+   `ai_label_status`, `topic_vectors`, `topic_vector_status` and `trace_topics`. Stop if a count is far larger than
+   you expect.
+
+   ```sql
+   SELECT count() FROM <table>
+   WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)
+     AND (workspace_id, project_id, trace_id) NOT IN (
+       SELECT workspace_id, project_id, id FROM traces
+       WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
+         AND id IN (SELECT trace_id FROM <table>
+                    WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
+   SETTINGS max_memory_usage = 2147483648;
+   ```
+
+3. Delete them, in this order: `ai_labels`, `ai_label_status`, `topic_vectors`, `topic_vector_status`,
+   `trace_topics`. Each delete is a synchronous lightweight delete of one partition:
+
+   ```sql
+   DELETE FROM <table> IN PARTITION <week>
+   WHERE workspace_id IN (<workspace_ids>)
+     AND (workspace_id, project_id, trace_id) NOT IN (
+       SELECT workspace_id, project_id, id FROM traces
+       WHERE workspace_id IN (<workspace_ids>)
+         AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) = <week>
+         AND id IN (SELECT trace_id FROM <table>
+                    WHERE _partition_value.1 = <week> AND workspace_id IN (<workspace_ids>)))
+   SETTINGS lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1, max_memory_usage = 2147483648;
+   ```
+
+4. Run step 2 again for the week. Every count is 0.
+
+The match is on workspace, project and trace: the same trace id can live in two projects. A trace re-created after
+its delete counts as live and keeps its rows. Each replica runs the subquery of a delete on its own, as for
+retention deletes.
+
 ## What to watch
 
 | Metric | Meaning |
@@ -84,6 +146,7 @@ LIMIT 1 BY workspace_id, project_id, task, trace_id, key;
 | `ai_labels.tick.interval_seconds`, `.budget_seconds` | The tick cadence and the time a tick may use, as configured (`AI_LABELS_TICK_INTERVAL`, `AI_LABELS_TICK_BUDGET`). Loading stops at 40% of the budget, the sweep at 70%, submit at all of it. |
 | `ai_labels.sweep.buckets` / `.buckets_reached` | N as configured vs the buckets the latest sweep got through before its share of the tick budget. Fewer than N means the sweep ran out of time (`ai_labels.sweep.overrun`); the first bucket swept rotates, so none starves. |
 | `ai_labels.sweep.candidates` / `ai_labels.tick.workspaces` | Traces the latest sweep found to label, and the workspaces they span. Many candidates but few admitted (`ai_labels.submit.traces`) means the budget, not the sweep, bounds throughput. |
+| `opik.http.client.pool.connections` by `route` and `state`, `.pending`, `.max` by `route` | The shared HTTP client's pool, in all (`route=all`) and on the route to opik-inference (`route=opik-inference`), which ai-labels, guardrail checks and Topics share. `pending` above zero on that route means calls wait for a connection: raise `JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE`, keeping the concurrency sum the backend checks at startup below it. |
 | `ai_labels.jobs.submitted` by `endpoint` | Jobs opik-inference accepted (202) and the tick recorded as open. Flat while `ai_labels.sweep.candidates` is high means submits fail: see `ai_labels.submit.throttled`, `.rejected` and the logs. |
 | `ai_labels.jobs.open` | Jobs submitted and not yet loaded, as the leader last knew them. Growing while `ai_labels.items.done` is flat means jobs finish slower than they start, or never: the pool, or the service, is behind. |
 | `ai_labels.jobs.oldest_open_seconds` | How long the oldest open job has been out, measured at scrape time. Past a few tick intervals the pipeline is stuck: the job is hung at the service, or the leader stopped ticking (the gauge then keeps growing on the last leader). 0 with none open. |
@@ -243,6 +306,49 @@ with the API, run the query on the same UTC date and at least `CACHE_MANAGER_TOP
 project's last API call, or the API can answer from its cache. A run that saves between the two reads changes the
 counts.
 
+### Traces filtered by topic
+
+The traces list takes a `topic_id` filter. "View all logs" on a topic opens the list with it. The value is a topic's
+`id` from this endpoint, or Other's all-zeros id. The field is `STRING_EXACT`, the type of the other id fields: the
+value is compared exactly, and ids are lower case. The page and the Logs chip use `=`. A value that is not an id
+matches no trace. The filter applies to the list and its `total`, to `GET /v1/private/traces/stats`, to the search
+stream (`POST /v1/private/traces/search`), to the trace KPI cards (`POST /v1/private/projects/{id}/kpi-cards`) and to
+the trace metrics (`POST /v1/private/projects/{id}/metrics`, `trace_filters`). `GET /v1/private/projects/stats`
+ignores it: it spans many projects, and a topic belongs to one.
+
+```json
+[{"field": "topic_id", "operator": "=", "value": "<topic_id>"}]
+```
+
+The filter uses the rules of [How it counts](#how-it-counts). Every row counts, each trace goes by its latest row,
+and a topic that is not live is Other. A trace with no counted row fails every operator, `!=` included: `!=` keeps
+only traces that have a topic row, so it is not the opposite of `=`. With topics off, a workspace not opted in or
+listed at a stage before `ui`, or a project with no live topic, the filter returns no trace and no error.
+
+The page's link opens Logs with the time range, which bounds the list by the time in the trace id. The read API counts
+by the trace's `created_at`. So the list's `total` can differ from the topic's `count` for traces whose id time is
+outside the window (late or imported traces), and around UTC midnight. For an exact match, add two `created_at`
+filters, `>=` the start of `window_from` and `<` the start of the day after `today`, both in UTC
+(`2026-10-06T00:00:00Z`), and the Logs page's filters `source = sdk` and `visibility_mode = default`. With these, the
+list's `total` equals the topic's `count`, and with the Other filter, the sum of `other.series`. A run that saves
+between the two requests can change both.
+
+The backend reads MySQL first: whether the workspace is eligible, then the project's live topics. Then each trace
+query gets `AND id IN (<subquery>)`, as score filters do. The subquery reads the project's `trace_topics` rows, keeps
+the latest row of each trace, and returns the ids that pass the filter. It is bounded only by the trace id range of
+the list: its time range and its cursor. With neither, it reads the project's whole history in `trace_topics`. It has
+no `log_comment` of its own: in `system.query_log` it is part of the list's queries (`find_traces_by_project_id`,
+`count_traces_by_project`). The KPI cards and the metrics carry the same subquery, bounded by their own id range.
+
+A query with a topic filter has two guards on the whole query, the trace read and the subquery together:
+`max_execution_time` from `TOPICS_FILTER_MAX_EXECUTION_TIME` (30 s) and `max_memory_usage` from
+`TOPICS_FILTER_MAX_MEMORY_USAGE` (4 GiB). The list, its count, the stats, the KPI cards and the trace metrics have them;
+a query without a topic filter has neither. A query that stops at a guard answers `503` with `Retry-After: 5` (see
+"Errors"). The search stream has already sent its status then, so it ends with an error, as for any ClickHouse error.
+A project whose "All time" filter trips a guard on every retry needs a narrower date range, or a higher limit if
+ClickHouse has the memory. The time guard takes at most 4 minutes: a longer query outlives the progress headers the
+driver can take at the default `ANALYTICS_DB_HTTP_HEADERS_PROGRESS_INTERVAL_MS`, and fails instead of answering `503`.
+
 ### Errors
 
 | Code | When |
@@ -251,6 +357,7 @@ counts.
 | 404 | The project is not in the workspace. |
 | 400 | A request without `project_id`. |
 | 503, `Topics are busy; retry shortly`, `Retry-After: 5` | A query hit its time guard (159), `TOPICS_READ_BUDGET` ran out, or ClickHouse did not answer within the budget and 2 s. The per-day counts of a large project take a fraction of the budget, so this is load, not size. The backend logs a WARN `Topics read is busy` with the workspace and the project. |
+| 503, `Retry-After: 5`, traces filtered by topic | A trace query with a topic filter (list, count, stats, KPI cards, trace metrics) stopped at a guard: time (159, `TOPICS_FILTER_MAX_EXECUTION_TIME`) or memory (241, `TOPICS_FILTER_MAX_MEMORY_USAGE`). A retry can pass. The backend logs a WARN `Trace query filtered by topic hit a guard`. |
 | 429 | More than `RATE_LIMIT_GET_PROJECT_TOPICS_PER_WORKSPACE_LIMIT` requests from one workspace in `RATE_LIMIT_GET_PROJECT_TOPICS_DURATION_IN_SEC` (60 s). |
 | 500 | Any other error. |
 
@@ -293,8 +400,8 @@ needs a deploy.
 ## Topics discovery runs
 
 A discovery run makes the topic list of a project that has none yet, from the project's topic vectors. A project
-with a saved list gets no second discovery run: updating a list is the nightly update's work, which is not shipped
-yet. Discovery runs read the same workspaces as ai-labels, only those listed in `TOPICS_ENABLED_WORKSPACES` at stage
+with a saved list gets no second discovery run: the nightly update updates it (see "Topics nightly updates"). Discovery
+runs read the same workspaces as ai-labels, only those listed in `TOPICS_ENABLED_WORKSPACES` at stage
 `build` or later (an id with no `:stage` suffix is at every stage), and run only with `TOPICS_ENABLED=true`.
 
 A discovery run reads the project's window: the 30 whole UTC days before the window's end. The planner's window ends at
@@ -616,6 +723,18 @@ The gate reads two MySQL tables that only the vectors tick writes: the `backfill
 `vectors_checked_at` (the last time the tick discovered the workspace's projects, about once per
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`, `1d` by default).
 
+The tick decides from `vectors_checked_at` which workspaces are due for discovery, so a change of the ticking pod does
+not start them again. Discovery runs after the fresh phase, which leaves it `TOPICS_VECTORS_DISCOVERY_MIN_SHARE` of the
+tick's budget, and takes at most half the budget. A discovery must finish within one tick. One that the budget cuts
+short writes nothing, and the next tick starts it again from its first read; `vectors_checked_at` is set only when a
+discovery finishes. `topics.vectors.discoveries_total` counts each discovery by `outcome` (`complete`, `cut`,
+`failed`). A discovery makes two reads per slice of `TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE` over the backfill
+window plus `AI_LABELS_HORIZON` and `TOPICS_VECTORS_FIND_CREATED_AT_SLACK`: 6 reads with the defaults. A workspace
+whose `cut` count grows every tick never finishes its discovery, so raise `TOPICS_VECTORS_FIND_DISCOVERY_SLICE_SIZE`.
+
+A workspace with more projects in backfill than `TOPICS_VECTORS_MAX_EXCLUDED_PROJECTS` is left to its backfill: each
+tick counts it in `topics.vectors.workspaces_not_read_total` with `reason = over_excluded`.
+
 Each project gets one of four states. "Fresh" means the workspace's `vectors_checked_at` is within 2 ×
 `TOPICS_VECTORS_LONG_WINDOW_INTERVAL`.
 
@@ -669,7 +788,7 @@ move between pods, so read the counters with `sum` across pods.
 | `topics.trace_topics.inserts` by `outcome` | `trace_topics` inserts after a save and per labelling page: `ok`, or `failed` after the retries. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No threshold is set. |
 
-A failed window count logs a WARN (`Topics discovery runs count failed`) with the workspace. The planner then counts
+A failed window count logs a WARN (`Topics window count failed`) with the workspace. The planner then counts
 each project of that workspace alone. The Prometheus names replace the dots with underscores, for example
 `topics_runs_total`. ClickHouse queries of the runs have a `log_comment` that starts with `topics:`.
 
@@ -687,3 +806,224 @@ both. Deleting a project:
 When that fails, `TopicsSweepJob` (every `TOPICS_STORAGE_SWEEP_INTERVAL` on each pod, in the same batches) deletes
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
+
+Topic on arrival (see "Topic on arrival") writes rows only for traces whose vectors the tick's deleted-trace check saw
+live. A trace deleted between that check and the arrival insert can still get an arrival row after the delete
+cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that exist), and
+retention removes it.
+
+## Topics nightly updates
+
+Once a night, each project with a saved list gets one nightly update: a run of mode `update` that updates its list
+with the night's window. The nightly updates go through the same queue as the discovery runs and share
+`TOPICS_RUNS_MAX_IN_FLIGHT`. They run for the workspaces listed in `TOPICS_ENABLED_WORKSPACES` at stage `nightly` or
+later.
+
+The night is the UTC date of the `TOPICS_NIGHTLY_SCHEDULE` fire that starts it. From the night's start until
+`TOPICS_NIGHTLY_BUDGET` after it, each plan of the leader does this, before the discovery runs:
+
+1. Reads the projects with a saved list that the night has not looked at (`last_night`) and that have no run in
+   flight.
+2. Skips, with no window count, a project that is deleted (`deleted`), a list that already covers the night
+   (`already_saved`), and a project whose last `TOPICS_NIGHTLY_PAUSE_FAILURES` runs failed within
+   `TOPICS_NIGHTLY_PAUSE_NIGHTS` nights (`paused`).
+3. Counts the windows, one ClickHouse count per workspace, while slots are free. It skips a project under
+   `TOPICS_RUN_MIN_VECTORS` (`small`) and queues the rest, the oldest `window_until` first. A project whose count
+   fails is decided `count_failed` and waits for the next night.
+
+Each decision writes `last_night` on the project's row, so later plans of the night leave it alone. A pod skips a
+queued update whose list covers the night by the time it claims it: the run ends `failed` with `cancelled` and is
+not counted in `failed_runs`.
+
+After the budget, no update is queued. The first plan after it adds the night to `not_reached_nights` of each project
+the night did not look at, unless its list already covers the night (saved after the budget). One plan logs the night's end (`Topics night '<date>' ended`) with the projects looked at
+and not reached; the Redis key `topics:nightly:end:<date>` makes it one.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `TOPICS_NIGHTLY_SCHEDULE` | `0 0 2 * * ?` | Quartz cron, UTC. The night starts at its first fire of the day. |
+| `TOPICS_NIGHTLY_BUDGET` | `2h` | How long after the night's start updates are queued. From `1m` to `20h`. |
+| `TOPICS_NIGHTLY_PAUSE_FAILURES` | `3` | Failed runs in a row that pause a project's nightly updates. From `1` to `100`. |
+| `TOPICS_NIGHTLY_PAUSE_NIGHTS` | `7` | A pause ends when the last failed run is older than this many nights. From `1` to `90`. |
+
+To stop the nightly updates for a workspace, list it in `TOPICS_ENABLED_WORKSPACES` at a stage before `nightly`, for
+example `<workspace_id>:arrival` (a deploy). Its saved list stays as it is.
+
+| Metric | Meaning |
+|---|---|
+| `topics.nightly.decisions` by `decision`, `reason` | Projects the night decided on: `update`, `skip` (with `reason`), `not_reached`, `count_failed`. |
+| `topics.nightly.nights` by `outcome` | `finished` once per night, after its budget; `failed` for each plan whose read failed, for every workspace or for one. |
+
+### What a nightly update does
+
+A project keeps its list and updates it. A topic's prototypes never move: a topic keeps the group centres it was born
+with and the ones a night adds while they take traces. The run reads the window (or its sample, as a discovery run
+does) and the saved list, then:
+
+1. Assigns every trace it read to its nearest prototype at `TOPICS_ALGORITHM_ASSIGN_MIN_COSINE` (default 0.75), with
+   the `TOPICS_ALGORITHM_OTHER_GATE` (0.95) gate on known Other: a topic, known Other, or unassigned.
+2. Groups the Other traces by k-means when they number `TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE` (20) or more. A group
+   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (2%) of the window or more.
+3. Makes one `naming` call (task `topics/tasks/naming.yaml`) for the candidates at
+   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.80) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
+   new topic, or sends them to Other. Candidates given to a topic are checked by one `verify_naming` call
+   (`verify.yaml`); the rejected ones go to one `naming_new` call (`naming_new.yaml`), which offers a new topic or
+   Other only. A new topic is born only at the big share; on a full list (`TOPICS_ALGORITHM_MAX_TOPICS`, 10) it replaces
+   the topic with the lowest share, if that share is below its own. An answer that is not a JSON object leaves its
+   candidates in Other and the run goes on. A call that fails or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
+   `TOPICS_RUN_VERIFY_DEADLINE` fails the run, and the list stays as it was.
+4. Assigns every trace again. A topic with no trace retires that night; a topic under `TOPICS_ALGORITHM_RETIRE_SHARE`
+   (0.5%) for `TOPICS_ALGORITHM_RETIRE_NIGHTS` (3) saved nights in a row retires (`low_share`). A topic replaced on a
+   full list retires as `replaced`. A retired topic does not come back: its theme is born again with a new id.
+
+A retired topic's row is deleted. The save logs `Topics run '<run_id>' retired topic '<topic_id>'` with the project,
+the reason and the size, and counts it in `topics.retired`. The line holds ids only: names and definitions come from
+trace text and are never logged. When every topic retires, the save clears the list and writes no labels; the next
+plans give the project a discovery run.
+
+The run's `saved` or `failed` line holds its `stats`: `mode`, `saved_runs_before`, `topics_before`, `unassigned`,
+`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`, and the
+churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
+the same over the traces in a topic both before and after. Prompts and answers are logged only as length and SHA-256;
+each call's request id is `<run_id>:<call>` in opik-inference's logs.
+
+### Running by hand
+
+An internal endpoint queues one project's nightly update now. Call it from inside the cluster.
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/projects/<project_id>/night?workspace_id=<workspace_id>&night=<yyyy-MM-dd>"
+```
+
+`night` is today (UTC) by default, at most tomorrow, and no older than the vectors backfill window. The workspace is
+listed at stage `nightly` or later, the project has a list whose `window_until` is before the night's start, its window
+holds `TOPICS_RUN_MIN_VECTORS` vectors, and it has no run in flight. These are the night's own skips, so the endpoint
+refuses a project the night would skip. The pause does not apply: a paused project runs by hand.
+`TOPICS_RUNS_MAX_IN_FLIGHT` and the budget do not apply, and `last_night` is not written.
+
+| Answer | Meaning |
+|---|---|
+| `202` | Queued; the body is `{"run_id": "..."}`. |
+| `409` | Below stage `nightly` or topics off; the night would skip the project, with the reason in the message (`no_list`, `deleted`, `already_saved` or `small`); or a run in flight. The message says which. |
+| `400` | The night is not a date, is after tomorrow, or is older than the vectors backfill window. |
+| `503` | Not started, nothing queued. Try again. |
+
+### Reading the night by hand
+
+These read `topic_projects` on the app-state MySQL. Add `AND workspace_id IN (...)` to read by the primary key. A
+workspace with no matching row is absent: read it as 0.
+
+```sql
+-- Paused: a list whose last TOPICS_NIGHTLY_PAUSE_FAILURES runs failed within TOPICS_NIGHTLY_PAUSE_NIGHTS nights
+-- (defaults 3 and 7)
+SELECT workspace_id, COUNT(*) AS paused_projects
+FROM topic_projects
+WHERE list_run_id IS NOT NULL AND failed_runs >= 3 AND last_failed_at >= UTC_DATE() - INTERVAL 7 DAY
+GROUP BY workspace_id;
+
+-- Starved: not reached by the budget on 2 nights or more in a row
+SELECT workspace_id, COUNT(*) AS starved_projects
+FROM topic_projects
+WHERE not_reached_nights >= 2
+GROUP BY workspace_id;
+
+-- The latest night that looked at a project, and its age; NULL before the first night
+SELECT MAX(last_night) AS last_night,
+       TIMESTAMPDIFF(SECOND, MAX(last_night), UTC_TIMESTAMP()) AS last_night_age_seconds
+FROM topic_projects;
+```
+
+For a paused project, read `run_error_code` and search the logs for its `run_id`. For starved projects, raise
+`TOPICS_NIGHTLY_BUDGET` or `TOPICS_RUNS_MAX_IN_FLIGHT`. When the last night is more than a day old, check that a leader
+plans (see "Stuck runs"): no plan, no night.
+
+## Topic on arrival
+
+A new trace gets a topic within about a minute, before the next run of its project. The vectors tick reads a
+workspace's traces (a fresh read, or a backfill turn), embeds them and writes their vectors chunk by chunk. Right after
+the read's last chunk, each of its traces that is still live gets the topic of the nearest saved prototype of its
+project, in one labelling and one `trace_topics` insert per read. A read that ends early (no time left, a failed chunk)
+still labels the vectors written before. The rule is the algorithm's labeller (`TopicAlgorithm.labeller`), the same
+rule the labelling pass uses. Code: `TopicsArrivalService`, called from `TopicVectorWriter`, in the fresh phase and in
+the backfill phase.
+
+Only a workspace listed at stage `arrival` or later in `TOPICS_ENABLED_WORKSPACES` gets arrival rows (`<id>:arrival`,
+`<id>:nightly`, `<id>:ui`, or the id alone). The tick reads the listed stages once per tick.
+
+### What it writes
+
+- One `trace_topics` row per trace: `source = 'arrival'`, `run_id` null, the topic's id or the all-zeros id for Other.
+- The list comes from MySQL, in one read-only transaction for the projects of a workspace read's live vectors, right
+  before the labelling and the insert: the projects' `topics` rows (their `vectors`) and
+  `topic_projects.other_vectors`. There is no cache.
+- A project with no saved list (`list_run_id` or `window_until` null), or a list with no topic, has no labeller. Its
+  traces get no row and wait for the project's next run.
+- The insert goes through the same path as a run's `trace_topics` insert: retried on a transient error, counted in
+  `topics.trace_topics.inserts`.
+
+### Why a run's row wins
+
+Readers take the latest row per trace by `last_updated_at`. A run writes its rows with `source = 'run'` and its run
+id, later than the arrival row, so the run's row wins. On an equal `last_updated_at`, the run's row still wins:
+readers then take the row with `source = 'run'`.
+
+One race is left. An arrival step reads the lists, labels and inserts back to back. A step that read the old list just
+before a run saves can insert a few rows after the run's rows. These rows hold the old list's topic until the next run
+of the project labels those traces.
+
+### Settings and turning it off
+
+- `TOPICS_ARRIVAL_TIMEOUT` (`topics.arrival.timeout`, default `5s`, from `1s` to `60s`). The arrival steps of one
+  workspace in one tick take this in total.
+- `TOPICS_ARRIVAL_MIN_STEP_TIME` (`topics.arrival.minStepTime`, default `1s`, not above the timeout). A step starts
+  only with at least this much left.
+
+Arrival has no switch of its own: it runs with the vectors tick (`TOPICS_ENABLED`). To stop it for a workspace, list
+the workspace at an earlier stage in `TOPICS_ENABLED_WORKSPACES` (a deploy), for example `<workspace_id>:build`: its
+vectors and runs go on, and its traces get no arrival row. To stop it everywhere, list every workspace at `:build` or
+`:vectors`.
+
+### Failures
+
+- Arrival is best effort. A failure is logged and counted. The tick writes and counts its vectors as without arrival.
+- Any failure stops arrival for the workspace for the rest of the tick: the read, the insert, or the labelling. The
+  traces of its later reads count as `after_failure`. The next run labels them. Other workspaces go on.
+- A failed read of the listed stages is logged (`Topic arrival stage read failed`), and no workspace gets arrival that
+  tick. The vectors go on.
+- A shutdown is not a failure. It cancels the tick, its arrival steps included.
+- The time bound: the steps of one workspace in one tick take `topics.arrival.timeout` in all, and each one ends
+  before the tick's deadline. A step (the saved lists read, or the labelling and insert of one read) that would start
+  with less than `topics.arrival.minStepTime` left does not start: its traces count as `over_budget`. A step that has
+  built its rows inserts them with the time left; only when no time is left do they count as `over_budget`. A lists
+  read or insert that runs out of time fails with `error_type = TimeoutException`.
+
+### What to watch
+
+| Metric | Labels | What it says |
+|---|---|---|
+| `topics.arrival.labelled` | `outcome`, `workspace_id`, `workspace_name` | Traces per outcome: `topic`, `other` (a row written), `no_prototypes` (the project has no saved list, or one with no topic), `over_budget` (no time left), `after_failure` (arrival stopped earlier in the tick for the workspace). |
+| `topics.arrival.failures` | `phase`, `error_type`, `workspace_id`, `workspace_name` | Failed steps per phase: `read` (the saved lists read), `insert` (the `trace_topics` insert), `assign` (any other failure of a step). |
+| `topics.arrival.duration_seconds` | `workspace_id`, `workspace_name` | Wall time of each step that started. |
+
+There is no alert. A rise of `after_failure` or of `failures` says arrival stops early in the tick; a rise of
+`over_budget` says the steps need more than `topics.arrival.timeout`.
+
+### Checking a project's arrival rows
+
+```sql
+-- ClickHouse: the project's traces whose current topic came from arrival, newest first
+SELECT trace_id, trace_created_at, topic_id, last_updated_at
+FROM (
+    SELECT trace_id, trace_created_at, topic_id, source, is_deleted, last_updated_at
+    FROM trace_topics
+    WHERE workspace_id = '<workspace_id>'
+      AND project_id = '<project_id>'
+    ORDER BY workspace_id, project_id, trace_id, last_updated_at DESC, source = 'run' DESC
+    LIMIT 1 BY workspace_id, project_id, trace_id
+)
+WHERE source = 'arrival' AND is_deleted = 0
+ORDER BY trace_created_at DESC
+LIMIT 100;
+```
+
+The all-zeros `topic_id` is Other. The other ids are `topics.id` in MySQL.
