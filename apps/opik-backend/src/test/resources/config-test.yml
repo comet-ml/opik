@@ -720,6 +720,8 @@ onlineScoring:
   # pending the pre-evaluation dispatch delay (OPIK-7224).
   attachmentFetchMaxRetries: 5
   attachmentFetchRetryDelay: 300ms
+  # How long the UI can read why a rule has not scored an experiment trace yet.
+  scoringStatusTtl: 1d
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

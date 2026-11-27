@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.llm.customllm.AuthTokenException;
 import com.comet.opik.infrastructure.llm.customllm.ProviderRequestRefusedException;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterDecisionModel;
 import com.comet.opik.infrastructure.llm.vertexai.LlmProviderVertexAI.CutOffBeforeAnsweringException;
+import com.comet.opik.infrastructure.net.RefusedHostException;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import com.google.api.client.http.HttpHeaders;
@@ -58,10 +59,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.io.InterruptedIOException;
 import java.net.ConnectException;
+import java.net.NoRouteToHostException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.net.http.HttpTimeoutException;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -188,7 +194,7 @@ class ChatCompletionServiceTest {
                             "Service is unreachable"));
         }
 
-        @ParameterizedTest(name = "when {0}, then throw InternalServerErrorException with user-friendly message")
+        @ParameterizedTest(name = "when {0}, then throw a 502 with user-friendly message")
         @MethodSource("connectionExceptionProvider")
         @DisplayName("Connection exceptions should produce user-friendly error messages")
         void create__whenConnectionException__thenThrowWithUserFriendlyMessage(
@@ -204,10 +210,12 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isExactlyInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(ServerErrorException.class)
                     .hasMessageContaining("Unexpected error calling LLM provider")
                     .hasMessageContaining(expectedMessagePart)
-                    .hasCauseInstanceOf(RuntimeException.class);
+                    .hasCauseInstanceOf(RuntimeException.class)
+                    .satisfies(thrown -> assertThat(((WebApplicationException) thrown).getResponse().getStatus())
+                            .isEqualTo(502));
         }
 
         @Test
@@ -644,7 +652,8 @@ class ChatCompletionServiceTest {
          * The last two rows are the invariants that keep the fallback honest: an {@code HttpException} anywhere in the
          * chain outranks the typed exception wrapping it (otherwise langchain4j's
          * {@code InternalServerException(HttpException(503))} would flatten to 500), and a failure that never reached
-         * HTTP carries no status to recover, so it stays a 500.
+         * HTTP carries no status to recover, so it is reported the way a gateway would: 502 when the provider couldn't
+         * be reached, 504 when it didn't answer in time.
          *
          * <p>The same rows drive {@code create}, {@code scoreTrace} and the streaming handler, because the three paths
          * are only worth having if they agree on the status.
@@ -685,7 +694,7 @@ class ChatCompletionServiceTest {
                     Arguments.of(
                             "bare TimeoutException",
                             new TimeoutException("provider timed out"),
-                            408,
+                            504,
                             UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "typed exception wrapping an HttpException",
@@ -695,24 +704,24 @@ class ChatCompletionServiceTest {
                     Arguments.of(
                             "failure that never reached HTTP",
                             new RuntimeException("Connection error", new ConnectException("Connection refused")),
-                            500,
+                            502,
                             "%s: Service is unreachable. Please check the provider URL."
                                     .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER)),
                     Arguments.of(
                             "Opik failure over a network cause, whose message stays server-side",
                             new AuthTokenException(OPIK_FAILURE,
                                     new SocketTimeoutException("Read timed out from 10.0.0.1")),
-                            500,
+                            504,
                             "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
                     Arguments.of(
                             "Opik failure over a refused connection keeps the message Opik wrote",
                             new AuthTokenException(OPIK_FAILURE, new ConnectException("Connection refused")),
-                            500,
+                            502,
                             "%s: %s".formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, OPIK_FAILURE)),
                     Arguments.of(
                             "Opik failure with a blank message adds nothing to the generic one",
                             new AuthTokenException(" ", new ConnectException("Connection refused")),
-                            500,
+                            502,
                             UNEXPECTED_ERROR_CALLING_LLM_PROVIDER),
                     Arguments.of(
                             "status outside the error families",
@@ -857,6 +866,31 @@ class ChatCompletionServiceTest {
                     Optional.of(new ErrorMessage(mappedStatus, "provider body says " + mappedStatus)));
 
             assertRetryable(thrown);
+        }
+
+        static Stream<Arguments> unansweredCalls() {
+            return Stream.of(
+                    Arguments.of("connection refused", new ConnectException("Connection refused"), 502),
+                    Arguments.of("unknown host", new UnknownHostException("provider.invalid"), 502),
+                    Arguments.of("unresolved address", new UnresolvedAddressException(), 502),
+                    Arguments.of("no route to host", new NoRouteToHostException("No route to host"), 502),
+                    Arguments.of("closed channel", new ClosedChannelException(), 502),
+                    Arguments.of("read timeout", new SocketTimeoutException("Read timed out"), 504),
+                    Arguments.of("call timeout", new InterruptedIOException("timeout"), 504),
+                    Arguments.of("http timeout", new HttpTimeoutException("request timed out"), 504),
+                    Arguments.of("host refused by the destination guard",
+                            new RefusedHostException("refused"), 500),
+                    Arguments.of("anything else", new IllegalStateException("unexpected"), 500));
+        }
+
+        @ParameterizedTest(name = "scoreTrace: {0} -> {2}")
+        @MethodSource("unansweredCalls")
+        @DisplayName("A provider that couldn't be reached or didn't answer is reported the way a gateway would")
+        void scoreTrace__whenTheProviderDoesNotAnswer__thenReportsTheGatewayStatus(String description,
+                Throwable cause, int expectedStatus) {
+            var thrown = whenScoreTraceFails(new RuntimeException("provider call failed", cause), Optional.empty());
+
+            assertRetryable(thrown, expectedStatus);
         }
 
         /**
@@ -1412,9 +1446,12 @@ class ChatCompletionServiceTest {
             when(llmProviderService.getLlmProviderError(any())).thenReturn(Optional.empty());
 
             // When & Then
+            // Every row is a provider that couldn't be reached, which a gateway reports as a 502
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isExactlyInstanceOf(InternalServerErrorException.class)
-                    .hasMessage(expectedMessage);
+                    .isExactlyInstanceOf(ServerErrorException.class)
+                    .hasMessage(expectedMessage)
+                    .satisfies(thrown -> assertThat(((WebApplicationException) thrown).getResponse().getStatus())
+                            .isEqualTo(502));
         }
 
         @Test
@@ -1433,7 +1470,7 @@ class ChatCompletionServiceTest {
 
             // When & Then
             assertThatThrownBy(() -> chatCompletionService.create(request, workspaceId))
-                    .isExactlyInstanceOf(InternalServerErrorException.class)
+                    .isExactlyInstanceOf(ServerErrorException.class)
                     .hasMessage("%s: Service is unreachable. Please check the provider URL."
                             .formatted(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER));
         }

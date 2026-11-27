@@ -3,10 +3,12 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.OnlineScoringStatus.Reason;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.evaluators.OnlineScoringStatusService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
@@ -44,6 +46,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
     private final Logger userFacingLogger;
+    private final OnlineScoringStatusService scoringStatusService;
 
     @Inject
     public OnlineScoringUserDefinedMetricPythonScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -52,10 +55,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
             @NonNull SpanService spanService,
-            @NonNull PythonEvaluatorService pythonEvaluatorService) {
+            @NonNull PythonEvaluatorService pythonEvaluatorService,
+            @NonNull OnlineScoringStatusService scoringStatusService) {
         super(config, redisson, feedbackScoreService, traceService, spanService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
+        this.scoringStatusService = scoringStatusService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
@@ -110,6 +115,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 })
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores)))
+                // The metric decides its score names, so only a metric that stored none is known to be short.
+                .flatMap(storedScores -> storedScores.isEmpty()
+                        ? scoringStatusService.recordSkipped(trace, message.workspaceId(), message.ruleId(), false,
+                                Reason.NO_SCORE)
+                        : scoringStatusService.clear(trace, message.workspaceId(), message.ruleId()))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
                         .error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",
                                 trace.id(), message.ruleName(), error.getMessage())))
@@ -121,7 +131,26 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         OnlineScoringEngine.logUnresolvedEvaluatorArguments(userFacingLogger, log, mdc, "traceId",
                 message.trace().id(), message.ruleName(), message.code().arguments());
-        return Mono.empty();
+        return scoringStatusService.recordSkipped(message.trace(), message.workspaceId(), message.ruleId(), false,
+                Reason.UNRESOLVED_ARGUMENTS)
+                .then(Mono.empty());
+    }
+
+    /**
+     * A metric's failure comes from the metric or the Python backend, never a provider, so the reasons that describe
+     * a provider's answer don't apply.
+     */
+    @Override
+    protected Mono<Void> onRetrying(TraceToScoreUserDefinedMetricPython message, Throwable error, int deliveryCount,
+            int maxDeliveries) {
+        return scoringStatusService.recordRetrying(message.trace(), message.workspaceId(), message.ruleId(), false,
+                Reason.OTHER, deliveryCount, maxDeliveries);
+    }
+
+    @Override
+    protected Mono<Void> onRetired(TraceToScoreUserDefinedMetricPython message, Throwable error) {
+        return scoringStatusService.recordFailed(message.trace(), message.workspaceId(), message.ruleId(), false,
+                Reason.OTHER);
     }
 
     private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, List<Span> spans,

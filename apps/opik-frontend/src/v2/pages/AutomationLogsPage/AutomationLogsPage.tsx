@@ -55,8 +55,10 @@ const COLUMNS_WIDTH_KEY = "automation-logs-columns-width";
 const AutomationLogsPage = () => {
   const {
     rule_id,
+    trace_id,
   }: {
     rule_id?: string;
+    trace_id?: string;
   } = useSearch({ strict: false });
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -70,6 +72,7 @@ const AutomationLogsPage = () => {
     useRulesLogsList(
       {
         ruleId: rule_id!,
+        traceId: trace_id,
       },
       {
         enabled: Boolean(rule_id),

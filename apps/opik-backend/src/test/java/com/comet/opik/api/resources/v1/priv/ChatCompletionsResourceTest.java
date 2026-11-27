@@ -618,6 +618,30 @@ class ChatCompletionsResourceTest {
             assertThat(actualEvents).isNotEmpty().noneMatch(event -> event.contains(marker));
         }
 
+        @Test
+        @DisplayName("a provider that can't be reached is reported as 502, streamed or not")
+        void anUnreachableProviderIsReportedAsBadGateway() throws IOException {
+            int closedPort;
+            try (var socket = new ServerSocket(0)) {
+                closedPort = socket.getLocalPort();
+            }
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            mockTargetWorkspace(workspaceName, UUID.randomUUID().toString());
+            createCustomProvider(workspaceName, "http://localhost:%d".formatted(closedPort));
+            var request = ChatCompletionRequest.builder().stream(false).model(MODEL).addUserMessage("ping").build();
+            var streamed = ChatCompletionRequest.builder().stream(true).model(MODEL).addUserMessage("ping").build();
+            var expected = new ErrorMessage(HttpStatus.SC_BAD_GATEWAY,
+                    UNEXPECTED_ERROR_CALLING_LLM_PROVIDER + ": Service is unreachable. Please check the provider URL.");
+
+            var actualError = chatCompletionsClient.create(API_KEY, workspaceName, request,
+                    HttpStatus.SC_BAD_GATEWAY);
+            var actualStreamedErrors = chatCompletionsClient.createAndGetStreamedError(API_KEY, workspaceName,
+                    streamed);
+
+            assertThat(actualError).isEqualTo(expected);
+            assertThat(actualStreamedErrors).containsExactly(expected);
+        }
+
         /**
          * Runs {@code test} with a retry budget of {@code maxRetries}, read by the service on every call, and restores
          * the configured one after it.

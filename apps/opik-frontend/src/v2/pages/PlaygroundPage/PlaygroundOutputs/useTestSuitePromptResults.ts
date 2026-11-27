@@ -12,30 +12,21 @@ import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import {
   DATASET_TYPE,
-  Evaluator,
   Experiment,
   EXPERIMENT_STATUS,
   ExperimentsCompare,
   ExperimentItem,
 } from "@/types/datasets";
-import { MetricType } from "@/types/test-suites";
+import {
+  getExpectedAssertionCount,
+  useSuiteAssertionCount,
+} from "./suiteAssertions";
 import { isExperimentTerminal } from "@/lib/experiments";
 
 const REFETCH_INTERVAL = 5000;
 
 export const isItemScored = (ei: { status?: string | null }): boolean => {
   return ei.status != null;
-};
-
-const getExpectedAssertionCount = (evaluators?: Evaluator[]): number => {
-  if (!evaluators) return 0;
-  return evaluators.reduce((sum, ev) => {
-    if (ev.type === MetricType.LLM_AS_JUDGE) {
-      const schema = (ev.config as { schema?: unknown[] })?.schema;
-      return sum + (Array.isArray(schema) ? schema.length : 0);
-    }
-    return sum;
-  }, 0);
 };
 
 const isItemScoredByAssertions = (
@@ -48,13 +39,20 @@ const isItemScoredByAssertions = (
   return isItemScored(ei);
 };
 
-export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
+// The row only carries the item's own assertions, so the suite's are passed in.
+export const areAllRowItemsScored = (
+  row: ExperimentsCompare,
+  suiteAssertionCount = 0,
+): boolean => {
   const items = row.experiment_items ?? [];
   if (items.length === 0) return false;
 
-  if ((row.evaluators?.length ?? 0) === 0) return true;
+  if ((row.evaluators?.length ?? 0) === 0 && suiteAssertionCount === 0) {
+    return true;
+  }
 
-  const expected = getExpectedAssertionCount(row.evaluators);
+  const expected =
+    getExpectedAssertionCount(row.evaluators) + suiteAssertionCount;
   return items.every((ei) => isItemScoredByAssertions(ei, expected));
 };
 
@@ -113,6 +111,15 @@ export default function useTestSuitePromptResults(): Record<
     });
   }, [experimentStatusResults]);
 
+  const suiteAssertionCount = useSuiteAssertionCount(
+    plainDatasetId || "",
+    experimentStatusResults[0]?.data as Experiment | undefined,
+  );
+  // Until the suite version is known, its items can't be counted as scored.
+  const rowScored = (row: ExperimentsCompare) =>
+    suiteAssertionCount !== undefined &&
+    areAllRowItemsScored(row, suiteAssertionCount);
+
   const { data: compareData } = useCompareExperimentsList(
     {
       workspaceName,
@@ -129,7 +136,7 @@ export default function useTestSuitePromptResults(): Record<
         if (rows.length === 0) return REFETCH_INTERVAL;
 
         if (allExperimentsFinished) return false;
-        return rows.every(areAllRowItemsScored) ? false : REFETCH_INTERVAL;
+        return rows.every(rowScored) ? false : REFETCH_INTERVAL;
       },
     },
   );
@@ -138,8 +145,12 @@ export default function useTestSuitePromptResults(): Record<
     if (allExperimentsFinished) return true;
     const rows = compareData?.content ?? [];
     if (rows.length === 0) return false;
-    return rows.every(areAllRowItemsScored);
-  }, [compareData?.content, allExperimentsFinished]);
+    return rows.every(
+      (row) =>
+        suiteAssertionCount !== undefined &&
+        areAllRowItemsScored(row, suiteAssertionCount),
+    );
+  }, [compareData?.content, allExperimentsFinished, suiteAssertionCount]);
 
   return useMemo(() => {
     if (!isTestSuite || entries.length === 0 || !allItemsScored) return null;

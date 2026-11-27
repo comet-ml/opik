@@ -1176,6 +1176,11 @@ onlineScoring:
   # Description: Delay between attachment-lookup retries (see attachmentFetchMaxRetries). Worst-case added
   #   latency ≈ attachmentFetchMaxRetries × this, and only for entities that expect an attachment. 50ms-5s.
   attachmentFetchRetryDelay: ${ONLINE_SCORING_ATTACHMENT_FETCH_RETRY_DELAY:-300ms}
+  # Default: 1d
+  # Description: How long the UI can read why a rule has not scored an experiment trace yet; after it the rule's
+  #   logs remain the record. Every status written renews it. At least 1h, and at least twice every stream's
+  #   pendingMessageDuration, so a retrying status outlasts the wait for the next delivery.
+  scoringStatusTtl: ${ONLINE_SCORING_STATUS_TTL:-1d}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

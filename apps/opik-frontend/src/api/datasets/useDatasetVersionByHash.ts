@@ -7,7 +7,7 @@ type UseDatasetVersionByHashParams = {
   versionHash: string;
 };
 
-const getDatasetVersionByHash = async (
+export const getDatasetVersionByHash = async (
   { signal }: QueryFunctionContext,
   { datasetId, versionHash }: UseDatasetVersionByHashParams,
 ) => {

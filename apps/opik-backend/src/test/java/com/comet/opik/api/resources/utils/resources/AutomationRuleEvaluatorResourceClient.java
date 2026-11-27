@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.evaluators.OnlineScoringStatus;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -15,6 +16,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -183,16 +185,29 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public LogPage getLogs(UUID evaluatorId, String workspaceName, String apiKey) {
-        try (var actualResponse = getLogs(evaluatorId, workspaceName, apiKey, HttpStatus.SC_OK)) {
+        return getLogs(evaluatorId, null, workspaceName, apiKey);
+    }
+
+    public Response getLogs(UUID evaluatorId, String workspaceName, String apiKey, int expectedStatus) {
+        return getLogs(evaluatorId, null, workspaceName, apiKey, expectedStatus);
+    }
+
+    public LogPage getLogs(UUID evaluatorId, UUID traceId, String workspaceName, String apiKey) {
+        try (var actualResponse = getLogs(evaluatorId, traceId, workspaceName, apiKey, HttpStatus.SC_OK)) {
             assertThat(actualResponse.hasEntity()).isTrue();
             return actualResponse.readEntity(LogPage.class);
         }
     }
 
-    public Response getLogs(UUID evaluatorId, String workspaceName, String apiKey, int expectedStatus) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+    private Response getLogs(UUID evaluatorId, UUID traceId, String workspaceName, String apiKey,
+            int expectedStatus) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())
-                .path("logs")
+                .path("logs");
+        if (traceId != null) {
+            target = target.queryParam("trace_id", traceId);
+        }
+        var actualResponse = target
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -202,6 +217,25 @@ public class AutomationRuleEvaluatorResourceClient {
         assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
         return actualResponse;
+    }
+
+    public List<OnlineScoringStatus> getScoringStatuses(UUID traceId, String workspaceName, String apiKey) {
+        try (var actualResponse = callGetScoringStatuses(traceId.toString(), workspaceName, apiKey)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(OnlineScoringStatus.OnlineScoringStatusList.class).content();
+        }
+    }
+
+    public Response callGetScoringStatuses(String traceId, String workspaceName, String apiKey) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("traces")
+                .path(traceId)
+                .path("scoring-statuses")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     // Session token authentication methods
