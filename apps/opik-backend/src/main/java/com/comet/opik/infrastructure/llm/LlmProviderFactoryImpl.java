@@ -64,7 +64,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         var config = buildConfig(providerConfig, workspaceId);
 
         return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> provider.getService(config))
+                .map(provider -> {
+                    provider.requireOnlyRoute(config, model, onlyRouteOf(model));
+                    return provider.getService(config);
+                })
                 .orElseThrow(() -> new LlmProviderUnsupportedException(
                         "LLM provider not supported: %s".formatted(llmProvider)));
     }
@@ -135,9 +138,16 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         var config = buildConfig(providerConfig, workspaceId);
 
         return Optional.ofNullable(services.get(llmProvider))
-                .map(provider -> newModel.apply(provider, config))
+                .map(provider -> {
+                    provider.requireOnlyRoute(config, modelParameters.name(), onlyRouteOf(modelParameters.name()));
+                    return newModel.apply(provider, config);
+                })
                 .orElseThrow(() -> new BadRequestException(
                         String.format(ERROR_MODEL_NOT_SUPPORTED, modelParameters.name())));
+    }
+
+    private String onlyRouteOf(String model) {
+        return catalogParams(model).map(ModelParams::onlyRoute).orElse(null);
     }
 
     private ModelParams.ToolsParam toolsOf(String model) {

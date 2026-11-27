@@ -181,9 +181,7 @@ OPENAI_DROPDOWN_EXCLUDE = [
     r"^chatgpt-image",
     r"^chatgpt-4o-latest$",    # deprecated by OpenAI (not in prices JSON)
     r"-transcribe",
-    r"-codex",
-    r"-pro$",                   # Responses API only (/v1/responses), we use /v1/chat/completions
-    r"-deep-research$",
+    r"-deep-research$",        # Responses-only like codex and pro, but refused without a web search, MCP or file search tool
     r"-chat-latest$",
     r"^o1-preview",
     r"^o1-mini",

@@ -27,6 +27,7 @@ export type ModelParams = {
   effort?: EffortParam;
   sampling_exclusive?: boolean;
   thinks_by_default?: boolean;
+  only_route?: string;
   routes?: Record<string, ModelParams>;
 };
 
