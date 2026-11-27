@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { clickRowAction } from './row-actions';
 
 /**
  * The workspace's Projects list — the default landing page.
@@ -99,8 +100,7 @@ export class ProjectsPage {
     return test.step(`Delete project "${projectId}" via row actions`, async () => {
       const row = this.projectRowById(projectId);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
 
       const confirm = this.deleteProjectConfirmDialog;
       await confirm.waitFor({ state: 'visible' });

@@ -1,20 +1,12 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Copy, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Copy, Pencil, Trash } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
 import { Environment } from "@/types/environments";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useEnvironmentBatchDeleteMutation from "@/api/environments/useEnvironmentBatchDeleteMutation";
 import AddEditEnvironmentDialog from "@/v2/pages-shared/environments/AddEditEnvironmentDialog/AddEditEnvironmentDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 
 type DialogState = "closed" | "edit" | "clone" | "delete";
 
@@ -40,13 +32,30 @@ const EnvironmentsRowActionsCell: React.FunctionComponent<
     resetKeyRef.current += 1;
   }, []);
 
+  const rowActions: RowAction[] = [
+    {
+      id: "edit",
+      label: "Edit",
+      icon: Pencil,
+      onClick: () => openDialog("edit"),
+    },
+    {
+      id: "clone",
+      label: "Clone",
+      icon: Copy,
+      onClick: () => openDialog("clone"),
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => openDialog("delete"),
+      destructive: true,
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <AddEditEnvironmentDialog
         key={`edit-${resetKeyRef.current}`}
         environment={environment}
@@ -64,33 +73,8 @@ const EnvironmentsRowActionsCell: React.FunctionComponent<
         confirmText="Delete environment"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={() => openDialog("edit")}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => openDialog("clone")}>
-            <Copy className="mr-2 size-4" />
-            Clone
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => openDialog("delete")}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

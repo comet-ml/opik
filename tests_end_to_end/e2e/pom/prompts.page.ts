@@ -2,6 +2,7 @@ import { test } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { PromptDetailPage } from './prompt-detail.page';
+import { clickRowAction } from './row-actions';
 
 export class PromptsPage {
   private projectId: string | null = null;
@@ -102,8 +103,7 @@ export class PromptsPage {
     return test.step(`delete prompt "${name}" via row actions`, async () => {
       const row = this.promptRow(name);
       await row.waitFor({ state: 'visible' });
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
 
       const confirm = this.deletePromptConfirmDialog(name);
       await confirm.waitFor({ state: 'visible' });

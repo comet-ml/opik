@@ -1,6 +1,7 @@
 import { test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { AlertEditorPage } from './alert-editor.page';
+import { clickRowAction } from './row-actions';
 
 /** The project-scoped alerts list at /projects/$projectId/alerts. */
 export class AlertsPage {
@@ -86,11 +87,10 @@ export class AlertsPage {
     });
   }
 
-  /** Opens an alert's edit form through its row actions menu. */
+  /** Opens an alert's edit form through its row actions. */
   async openEditForm(alertId: string): Promise<AlertEditorPage> {
     return test.step(`open the edit form for alert ${alertId}`, async () => {
-      await this.openRowActions(alertId);
-      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.clickRowAction(alertId, 'Edit');
       const editor = new AlertEditorPage(this.page);
       await editor.waitForEditReady();
       return editor;
@@ -98,17 +98,16 @@ export class AlertsPage {
   }
 
   /**
-   * Deletes an alert through its row's kebab menu, confirming the destructive
+   * Deletes an alert through its row actions, confirming the destructive
    * dialog. Resolves once the row has left the list.
    *
    * The confirm button is dialog-scoped and matched exactly: "Delete alert"
    * also names the dialog's heading, and "Delete" alone additionally matches
-   * the kebab menu item still in the DOM.
+   * the row's Delete action.
    */
   async deleteAlert(alertId: string): Promise<void> {
     return test.step(`delete alert ${alertId} via row actions`, async () => {
-      await this.openRowActions(alertId);
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await this.clickRowAction(alertId, 'Delete');
 
       const confirm = this.confirmDialog('Delete alert');
       await confirm.waitFor({ state: 'visible' });
@@ -156,10 +155,10 @@ export class AlertsPage {
     });
   }
 
-  private async openRowActions(alertId: string): Promise<void> {
+  private async clickRowAction(alertId: string, name: string): Promise<void> {
     const row = this.alertRow(alertId);
     await row.waitFor({ state: 'visible' });
-    await row.getByRole('button', { name: 'Actions menu' }).click();
+    await clickRowAction(row, name);
   }
 
   private confirmDialog(heading: string): Locator {

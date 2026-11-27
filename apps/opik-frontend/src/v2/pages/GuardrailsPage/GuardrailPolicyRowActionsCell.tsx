@@ -1,18 +1,10 @@
 import React, { useCallback, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Copy, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Copy, Pencil, Trash } from "lucide-react";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { useToast } from "@/ui/use-toast";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { GuardrailPolicy } from "@/types/guardrails";
 import useGuardrailPolicyBatchDeleteMutation from "@/api/guardrail-policies/useGuardrailPolicyBatchDeleteMutation";
 
@@ -33,7 +25,6 @@ const GuardrailPolicyRowActionsCell: React.FunctionComponent<
 
   const { mutate: deletePolicy } = useGuardrailPolicyBatchDeleteMutation();
 
-  const [open, setOpen] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const handleDeleteConfirm = useCallback(() => {
@@ -49,53 +40,30 @@ const GuardrailPolicyRowActionsCell: React.FunctionComponent<
     );
   }, [deletePolicy, policy, toast]);
 
-  const handleEdit = useCallback(() => {
-    setOpen(false);
-    onEdit(policy);
-  }, [onEdit, policy]);
-
-  const handleDuplicate = useCallback(() => {
-    setOpen(false);
-    onDuplicate(policy);
-  }, [onDuplicate, policy]);
-
-  const handleDelete = useCallback(() => {
-    setOpenConfirmDialog(true);
-    setOpen(false);
-  }, []);
+  const rowActions: RowAction[] = [
+    {
+      id: "edit",
+      label: "Edit",
+      icon: Pencil,
+      onClick: () => onEdit(policy),
+    },
+    {
+      id: "duplicate",
+      label: "Duplicate",
+      icon: Copy,
+      onClick: () => onDuplicate(policy),
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => setOpenConfirmDialog(true),
+      destructive: true,
+    },
+  ];
 
   return (
-    // CellWrapper caps the cell at the table's row height; without it the size-10 trigger button
-    // would make every row taller than the rows on the neighbouring tables.
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={handleEdit}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleDuplicate}>
-            <Copy className="mr-2 size-4" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleDelete} variant="destructive">
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <>
       <ConfirmDialog
         open={openConfirmDialog}
         setOpen={setOpenConfirmDialog}
@@ -105,7 +73,8 @@ const GuardrailPolicyRowActionsCell: React.FunctionComponent<
         confirmText="Delete policy"
         confirmButtonVariant="destructive"
       />
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

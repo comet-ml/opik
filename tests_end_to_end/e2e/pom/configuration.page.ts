@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+import { clickRowAction } from './row-actions';
 
 /**
  * Provider name as shown in the FE. Must match `ProviderGridOption.label`
@@ -476,8 +477,7 @@ export class ConfigurationPage {
   async openCustomProviderEdit(providerName: string): Promise<Locator> {
     return test.step(`open edit dialog for custom provider "${providerName}"`, async () => {
       const row = await this.customProviderRow(providerName);
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await clickRowAction(row, 'Edit');
       const dialog = this.page.getByRole('dialog', { name: 'Edit provider configuration' });
       await dialog.waitFor({ state: 'visible' });
       return dialog;
@@ -488,8 +488,7 @@ export class ConfigurationPage {
   async deleteCustomProvider(providerName: string): Promise<void> {
     return test.step(`delete custom provider "${providerName}"`, async () => {
       const row = await this.customProviderRow(providerName);
-      await row.getByRole('button', { name: 'Actions menu' }).click();
-      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+      await clickRowAction(row, 'Delete');
       await this.page
         .getByRole('button', { name: 'Delete configuration', exact: true })
         .click();

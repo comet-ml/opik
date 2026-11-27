@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ColumnPinningState } from "@tanstack/react-table";
-import { Plus } from "lucide-react";
+import { CellContext, ColumnPinningState } from "@tanstack/react-table";
+import { Lock, Plus } from "lucide-react";
 
 import { convertColumnDataToColumn } from "@/lib/table";
 import { ProviderObject, PROVIDER_TYPE } from "@/types/providers";
@@ -11,6 +11,8 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
@@ -22,6 +24,20 @@ import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
+const ProviderNameCell = (context: CellContext<ProviderObject, string>) => (
+  <CellWrapper
+    metadata={context.column.columnDef.meta}
+    tableMetadata={context.table.options.meta}
+  >
+    <span className="truncate">{context.getValue()}</span>
+    {context.row.original.read_only && (
+      <TooltipWrapper content="Read-only">
+        <Lock className="ml-1.5 size-3 shrink-0 text-light-slate" />
+      </TooltipWrapper>
+    )}
+  </CellWrapper>
+);
+
 export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
   {
     id: COLUMN_NAME_ID,
@@ -31,6 +47,7 @@ export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
       row.provider === PROVIDER_TYPE.CUSTOM
         ? row.provider_name || LEGACY_CUSTOM_PROVIDER_NAME
         : PROVIDERS[row.provider]?.apiKeyName,
+    cell: ProviderNameCell as never,
   },
   {
     id: "base_url",

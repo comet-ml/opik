@@ -1,17 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Copy, Trash } from "lucide-react";
+import { Pencil, Copy, Trash } from "lucide-react";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import AddEditCloneDashboardDialog from "@/v2/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
@@ -33,7 +25,6 @@ export const DashboardRowActionsCell: React.FunctionComponent<
 
   const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
 
-  const [open, setOpen] = useState<boolean>(false);
   const [openEdit, setOpenEdit] = useState<boolean>(false);
   const [openClone, setOpenClone] = useState<boolean>(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState<boolean>(false);
@@ -46,62 +37,44 @@ export const DashboardRowActionsCell: React.FunctionComponent<
 
   const handleEdit = useCallback(() => {
     setOpenEdit(true);
-    setOpen(false);
     resetKeyRef.current = resetKeyRef.current + 1;
   }, []);
 
   const handleClone = useCallback(() => {
     setOpenClone(true);
-    setOpen(false);
     resetKeyRef.current = resetKeyRef.current + 1;
   }, []);
 
   const handleDelete = useCallback(() => {
     setOpenConfirmDialog(true);
-    setOpen(false);
   }, []);
 
   if (!canEditDashboards && !canCreateDashboards && !canDeleteDashboards) {
     return null;
   }
 
+  const rowActions: RowAction[] = [
+    ...(canEditDashboards
+      ? [{ id: "edit", label: "Edit", icon: Pencil, onClick: handleEdit }]
+      : []),
+    ...(canCreateDashboards
+      ? [{ id: "clone", label: "Clone", icon: Copy, onClick: handleClone }]
+      : []),
+    ...(canDeleteDashboards
+      ? [
+          {
+            id: "delete",
+            label: "Delete",
+            icon: Trash,
+            onClick: handleDelete,
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {canEditDashboards && (
-            <DropdownMenuItem onClick={handleEdit}>
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {canCreateDashboards && (
-            <DropdownMenuItem onClick={handleClone}>
-              <Copy className="mr-2 size-4" />
-              Clone
-            </DropdownMenuItem>
-          )}
-          {(canEditDashboards || canCreateDashboards) &&
-            canDeleteDashboards && <DropdownMenuSeparator />}
-          {canDeleteDashboards && (
-            <DropdownMenuItem onClick={handleDelete} variant="destructive">
-              <Trash className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+    <>
       <AddEditCloneDashboardDialog
         mode="edit"
         key={`edit-${resetKeyRef.current}`}
@@ -126,6 +99,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
         confirmText="Delete dashboard"
         confirmButtonVariant="destructive"
       />
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };

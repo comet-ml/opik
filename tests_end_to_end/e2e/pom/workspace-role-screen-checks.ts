@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import type { WorkspaceRoleMember } from '../fixtures/workspace-role-member.fixture';
+import { openRowActions } from './row-actions';
 
 export interface ScreenAccessCheck {
   name: string;
@@ -131,25 +132,21 @@ export async function checkRowDeleteActionVisibility(
       .filter({ has: member.page.getByRole('cell', { name: rowName, exact: true }) });
     await row.waitFor({ state: 'visible' });
 
-    // A role without delete rights may not render the "Actions menu" trigger
-    // at all (not just hide "Delete" inside an always-present menu) — check
-    // this first so the negative case doesn't hang trying to click a button
-    // that was never going to appear.
-    const actionsButton = row.getByRole('button', { name: 'Actions menu' });
-    const hasActionsButton = await actionsButton.isVisible().catch(() => false);
-    if (!hasActionsButton) {
+    // A role without any action on the row renders no row actions at all;
+    // check this first so the negative case doesn't hang waiting for them.
+    if ((await row.getByTestId('row-actions').count()) === 0) {
       expect
-        .soft(expectedVisible, `${member.role}: expected ${label} row delete action to be ${expectedVisible ? 'visible' : 'absent'} (Actions menu itself is not rendered)`)
+        .soft(expectedVisible, `${member.role}: expected ${label} row delete action to be ${expectedVisible ? 'visible' : 'absent'} (no row actions are rendered)`)
         .toBe(false);
       return;
     }
 
-    await actionsButton.click();
-    const deleteItem = member.page.getByRole('menuitem', { name: 'Delete' });
+    const actions = await openRowActions(row);
+    const deleteAction = actions.getByRole('button', { name: 'Delete', exact: true });
     if (expectedVisible) {
-      await expect.soft(deleteItem).toBeVisible();
+      await expect.soft(deleteAction).toBeVisible();
     } else {
-      await expect.soft(deleteItem).toBeHidden();
+      await expect.soft(deleteAction).toBeHidden();
     }
     await member.page.keyboard.press('Escape');
   });
