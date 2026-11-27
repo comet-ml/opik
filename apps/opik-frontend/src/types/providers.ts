@@ -387,6 +387,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
   INCLUSIONAI_LING_3_1_FLASH = "inclusionai/ling-3.1-flash",
   INCLUSIONAI_LING_3_2_FLASH_FREE = "inclusionai/ling-3.2-flash:free",
+  INCLUSIONAI_LINGSANTE_3_1_AIR_VL = "inclusionai/lingsante-3.1-air-vl",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
   INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
   INFERENCE_NET_SCHEMATRON_V2_SMALL = "inference-net/schematron-v2-small",

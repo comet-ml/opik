@@ -13,8 +13,10 @@ import {
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  DEFAULT_GEMINI_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
   DEFAULT_OPEN_ROUTER_CONFIGS,
+  DEFAULT_VERTEX_AI_CONFIGS,
   OPENAI_MODEL_CAPABILITIES,
 } from "@/constants/llm";
 import {
@@ -231,6 +233,18 @@ export const supportsGeminiSamplingParams = (
     SAMPLING_CAPABLE_GEMINI_GENERATIONS.test(id) ||
     SAMPLING_CAPABLE_UNVERSIONED_GEMINI_IDS.has(id)
   );
+};
+
+export const getGeminiDefaultTemperature = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): number => {
+  const temperature = getGeminiOrVertexListedParams(model)?.temperature;
+  if (isAccepted(temperature) && temperature?.default !== undefined) {
+    return temperature.default;
+  }
+  return isVertexModel(model)
+    ? DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE
+    : DEFAULT_GEMINI_CONFIGS.TEMPERATURE;
 };
 
 /**
@@ -1008,6 +1022,18 @@ export const updateProviderConfig = <
   ) {
     const next: T = { ...currentConfig };
     let changed = false;
+
+    // A temperature still at the previous model's default was never picked, so it follows the next
+    // model's default.
+    const nextTemperature = getGeminiDefaultTemperature(params.model);
+    if (
+      params.previousModel !== undefined &&
+      next.temperature === getGeminiDefaultTemperature(params.previousModel) &&
+      next.temperature !== nextTemperature
+    ) {
+      next.temperature = nextTemperature;
+      changed = true;
+    }
 
     // thinkingLevel: drop it for models without a level option list, otherwise make sure it holds a
     // level this model actually offers — coercing a stale one (an "off" carried over from 2.5 Flash

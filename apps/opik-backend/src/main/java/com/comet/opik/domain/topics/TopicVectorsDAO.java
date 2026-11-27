@@ -320,10 +320,8 @@ public class TopicVectorsDAO {
                     node.put("embed_model", row.embedModel());
                     node.put("embed_dimensions", row.embedDimensions());
                     node.put("text", row.text());
-                    var vector = node.putArray("vector");
-                    for (float value : row.vector()) {
-                        vector.add(value);
-                    }
+                    // Serialized as the float array it is: the same numbers as one node per value, without them.
+                    node.putPOJO("vector", row.vector());
                     return node;
                 });
     }

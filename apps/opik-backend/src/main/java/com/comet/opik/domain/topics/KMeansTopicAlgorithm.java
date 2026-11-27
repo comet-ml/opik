@@ -34,6 +34,12 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     /** The k-means seed: fixed, so the same window always gives the same groups. */
     static final long SEED = 0;
 
+    /**
+     * Below this many groups a discovery run keeps each trace's cosine to each group centre, {@code n * k} doubles,
+     * instead of the window's {@code n * dimensions} floats, which then need not outlive the clustering.
+     */
+    static final int COSINE_TABLE_BELOW_GROUPS = TopicEmbedding.DIMENSIONS / 2;
+
     private final AlgorithmConfig config;
     private final TopicTasks tasks;
 
@@ -54,12 +60,27 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     @Override
     public Clustering cluster(@NonNull TopicWindow window, int maxTopics) {
         var stats = JsonUtils.createObjectNode();
-        var merged = IntentMerger.merge(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        // The window's rows are reordered in place for the fit and the examples, not copied: a copy is the heap's
+        // largest item on a first build. They are restored before the window is read again.
+        var inPlace = IntentMerger.mergeInPlace(window.texts(), window.vectors(), TopicEmbedding.DIMENSIONS);
+        var merged = inPlace.merged();
+        KMeansResult fit;
+        List<List<String>> examples;
+        int k;
+        int perGroup;
+        try {
+            k = groups(merged.size());
+            var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
+            fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
+                    config.getKmeansMaxIterations(), config.getKmeansRestarts());
+            perGroup = authorExampleCount(k);
+            int frequent = Math.min(config.getAuthorFrequent(), perGroup);
+            examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
+                    perGroup - frequent);
+        } finally {
+            inPlace.restore();
+        }
         int unique = merged.size();
-        int k = groups(unique);
-        var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();
-        var fit = KMeans.fit(merged.vectors(), weights, TopicEmbedding.DIMENSIONS, k, SEED,
-                config.getKmeansMaxIterations(), config.getKmeansRestarts());
         var groupOf = Arrays.stream(merged.textOfTrace()).map(text -> fit.labels()[text]).toArray();
         stats.put("unique_texts", unique);
         stats.put("k", k);
@@ -68,11 +89,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         stats.put("kmeans_iterations", fit.iterations());
 
         var groups = GroupSummaries.summarize(groupOf, k);
-        int perGroup = authorExampleCount(k);
-        int frequent = Math.min(config.getAuthorFrequent(), perGroup);
         stats.put("author_examples", perGroup);
-        var examples = GroupSummaries.authorExamples(merged, fit.labels(), fit.centres(), frequent,
-                perGroup - frequent);
         var task = tasks.author();
         stats.put("author_task_version", task.version());
         var author = LlmRequest.builder()
@@ -81,14 +98,47 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 .schema(task.schema())
                 .maxTokens(task.effectiveMaxTokens())
                 .build();
-        return new KMeansClustering(window.vectors(), maxTopics, groups, fit.centres(), author, stats);
+        // The assignment after the author call compares each trace with group centres only. With fewer groups than
+        // COSINE_TABLE_BELOW_GROUPS, those cosines take less memory than the vectors, so the clustering keeps them and
+        // the window can go while the call runs.
+        var traces = k < COSINE_TABLE_BELOW_GROUPS
+                ? AssignmentInput.table(PrototypeAssigner.cosines(window.vectors(), fit.centres(), k,
+                        TopicEmbedding.DIMENSIONS), k)
+                : AssignmentInput.vectors(window.vectors());
+        return new KMeansClustering(traces, maxTopics, groups, fit.centres(), author, stats);
+    }
+
+    /**
+     * What the assignment reads per trace: its vector, or its cosine to each group centre. Both give the same labels,
+     * as {@link PrototypeAssigner#cosines} computes a cosine exactly as the assigner does, and every prototype of a
+     * discovery run is a group centre.
+     */
+    private record AssignmentInput(float[] vectors, double[] table, int groups) {
+
+        static AssignmentInput vectors(float[] vectors) {
+            return new AssignmentInput(vectors, null, 0);
+        }
+
+        static AssignmentInput table(double[] table, int groups) {
+            return new AssignmentInput(null, table, groups);
+        }
+
+        int[] assign(PrototypeAssigner assigner, AppliedAnswer applied) {
+            if (vectors != null) {
+                return assigner.assign(vectors);
+            }
+            var topicGroups = applied.topics().stream().flatMap(topic -> topic.groups().stream())
+                    .mapToInt(Integer::intValue).toArray();
+            var otherGroups = applied.other().stream().mapToInt(Integer::intValue).toArray();
+            return assigner.assign(table, groups, topicGroups, otherGroups);
+        }
     }
 
     /** The groups of one window, waiting for the author answer. */
     @RequiredArgsConstructor
     private final class KMeansClustering implements Clustering {
 
-        private final float[] vectors;
+        private final AssignmentInput traces;
         private final int maxTopics;
         private final List<GroupSummary> groups;
         private final float[] centres;
@@ -126,7 +176,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             // near it is saved, so it would assign no trace.
             return DiscoveredTopics.builder()
                     .topics(topics)
-                    .labels(assigner.assign(vectors))
+                    .labels(traces.assign(assigner, applied))
                     .otherPrototypes(assigner.keptOther())
                     .stats(finishStats)
                     .build();

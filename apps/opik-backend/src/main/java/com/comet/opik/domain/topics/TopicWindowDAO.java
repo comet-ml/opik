@@ -19,7 +19,6 @@ import java.lang.reflect.Array;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -392,7 +391,8 @@ public class TopicWindowDAO {
 
     /**
      * The stored vector at unit length again: ClickHouse truncates it to BFloat16 on insert, which leaves it slightly
-     * shorter. The read casts it to Float32, as the driver returns a BFloat16 array's raw bits.
+     * shorter. The read casts it to Float32, as the driver returns a BFloat16 array's raw bits. The driver's array is
+     * the row's own and is read once, so it is scaled in place.
      */
     private static float[] toVector(Row row) {
         // The driver returns Array(Float32) as a float[]; that type isn't part of its contract, so reflection stays as
@@ -400,7 +400,7 @@ public class TopicWindowDAO {
         var array = row.get("vector", Object.class);
         float[] vector;
         if (array instanceof float[] floats) {
-            vector = Arrays.copyOf(floats, floats.length);
+            vector = floats;
         } else {
             vector = new float[Array.getLength(array)];
             for (int i = 0; i < vector.length; i++) {

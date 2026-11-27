@@ -1213,7 +1213,7 @@ topics:
     maxMemoryUsage: 1073741824
     maxThreads: 2
     priority: 0
-    maxBlockSize: 8192
+    maxBlockSize: 1024
     budget: 10s
   # Small, so the tests delete over more than one batch.
   storage:

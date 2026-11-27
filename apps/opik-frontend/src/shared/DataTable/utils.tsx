@@ -201,10 +201,17 @@ export const shiftCheckboxClickHandler = <TData,>(
   }
 };
 
-export const generateSelectColumDef = <TData,>(meta?: {
-  verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
-  cellClassName?: string | ((context: CellContext<TData, unknown>) => string);
-}) => {
+// Full-page tables (PageBodyStickyTableWrapper) pad their first cell to the
+// 24px page gutter instead of 12px, so the checkbox needs a wider column there.
+export const PAGE_BODY_SELECT_COLUMN_SIZE = 52;
+
+export const generateSelectColumDef = <TData,>(
+  meta?: {
+    verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+    cellClassName?: string | ((context: CellContext<TData, unknown>) => string);
+  },
+  size = 40,
+) => {
   let previousSelectedRowID = "";
 
   return {
@@ -259,7 +266,7 @@ export const generateSelectColumDef = <TData,>(meta?: {
       );
     },
     meta,
-    size: 50,
+    size,
     enableResizing: false,
     enableSorting: false,
     enableHiding: false,
