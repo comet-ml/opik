@@ -45,6 +45,11 @@ on:
         required: false
         default: "main"
         description: ai-spend plugin ref
+      push:
+        type: boolean
+        required: false
+        default: true
+        description: Push the images; false only checks that they build
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
@@ -131,8 +136,10 @@ jobs:
         with:
           ref: ${{ inputs.build_from }}
 
+      # Bundles the executor image tagged with this version, which only a pushing run publishes;
+      # the Dockerfile's COPY of it is optional.
       - name: Save opik-sandbox-executor-python
-        if: inputs.image == 'opik-python-backend'
+        if: inputs.image == 'opik-python-backend' && inputs.push
         env:
           IS_ADHOC: ${{ inputs.is_adhoc }}
           INPUT_VERSION: ${{ inputs.version }}
@@ -191,7 +198,7 @@ jobs:
           cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main
           provenance: false
           load: false
-          outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=${{ inputs.push }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
@@ -204,6 +211,7 @@ jobs:
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
       - name: Export digest
+        if: inputs.push
         run: |
           mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           digest="${{ steps.build.outputs.digest }}"
@@ -212,6 +220,7 @@ jobs:
           echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
 
       - name: Upload digest
+        if: inputs.push
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-${{ matrix.platform }}
@@ -220,6 +229,7 @@ jobs:
           retention-days: 1
 
   merge:
+    if: inputs.push
     needs: [generate-matrix, build]
     runs-on: ubuntu-latest
     permissions:

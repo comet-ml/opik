@@ -38,9 +38,8 @@ jobs:
       # Build only: the source tree checks (lint, typecheck, unit tests) all run
       # against the working tree, so they miss anything that only breaks in a clean
       # Docker build context -- e.g. a COPY of a directory that git dropped because
-      # it went empty. amd64 only: the Dockerfile has no arch-conditional logic, so
-      # a second arch doubles runtime without covering a distinct failure mode.
-      # Multi-arch stays on the release path in build_apps.yml.
+      # it went empty. amd64 only: build_apps.yml runs on PRs that change the Dockerfile
+      # or package files, the only inputs that can break one arch alone.
       #
       # No layer cache: nearly every run is triggered by an apps/opik-frontend/** change,
       # which invalidates the Dockerfile's `COPY . .` by construction, so the
