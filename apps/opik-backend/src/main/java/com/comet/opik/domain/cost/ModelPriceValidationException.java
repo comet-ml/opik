@@ -10,7 +10,7 @@ public class ModelPriceValidationException extends RuntimeException {
     private final @NonNull CustomModelPriceValidator.Result result;
 
     public ModelPriceValidationException(@NonNull CustomModelPriceValidator.Result result) {
-        super("%d model price rows are invalid".formatted(result.errors().size()));
+        super("Invalid model prices, errors '%d'".formatted(result.errors().size()));
         this.result = result;
     }
 }

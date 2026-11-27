@@ -24,6 +24,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -182,6 +183,29 @@ class ModelPriceStoreTest {
         assertThat(historyActions(organizationId, 2)).containsExactlyInAnyOrder(ModelPriceHistoryAction.CREATED,
                 ModelPriceHistoryAction.DELETED, ModelPriceHistoryAction.UPDATED);
         assertLoaded(organizationId, 2, after);
+    }
+
+    @Test
+    void replaceAllReturnsTheCreatedAndUpdatedRowsAsStored() {
+        var organizationId = newOrganizationId();
+        replace(organizationId, """
+                [{"model": "gpt-4o", "provider": "openai", "kind": "fixed", "input_price": "2.00"}]
+                """, null);
+
+        var result = replace(organizationId, """
+                [{"model": "gpt-4o", "provider": "openai", "kind": "fixed", "input_price": "2.50"},
+                 {"model": "o3", "provider": "openai", "kind": "fixed", "input_price": "4.00"}]
+                """, 1L);
+
+        var stored = jdbi.withHandle(handle -> handle.attach(ModelPriceDAO.class).findRows(organizationId));
+        assertThat(Stream.concat(result.diff().created().stream(),
+                result.diff().updated().stream().map(ModelPriceDiff.Change::after)))
+                .containsExactlyInAnyOrderElementsOf(stored);
+        assertThat(stored).allSatisfy(row -> {
+            assertThat(row.createdAt()).isNotNull();
+            assertThat(row.lastUpdatedAt()).isNotNull();
+            assertThat(row.lastUpdatedBy()).isEqualTo(USER_NAME);
+        });
     }
 
     @Test

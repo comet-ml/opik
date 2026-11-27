@@ -10,7 +10,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** What replacing an organization's stored rows with a requested list changes, matched by model and provider. */
@@ -64,6 +66,18 @@ public record ModelPriceDiff(
 
     public boolean isEmpty() {
         return created.isEmpty() && updated.isEmpty() && deleted.isEmpty();
+    }
+
+    /** This diff with its created rows and updated {@code after} rows as written, audit fields included. */
+    ModelPriceDiff withRowsAsStored(@NonNull List<ModelPriceRow> stored) {
+        Map<UUID, ModelPriceRow> storedById = stored.stream()
+                .collect(Collectors.toMap(ModelPriceRow::id, Function.identity()));
+        return toBuilder()
+                .created(created.stream().map(row -> storedById.get(row.id())).toList())
+                .updated(updated.stream()
+                        .map(change -> change.toBuilder().after(storedById.get(change.after().id())).build())
+                        .toList())
+                .build();
     }
 
     public List<ModelPriceRow> rowsAfter() {

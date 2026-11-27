@@ -82,7 +82,12 @@ class ModelPriceStore {
         }
         dao.insertHistory(organizationId, version, historyOf(diff), userName);
         dao.updateList(organizationId, version, diff.rowsAfter().size(), userName);
-        return ModelPriceReplaceResult.builder().version(version).saved(true).diff(diff).warnings(List.of()).build();
+        return ModelPriceReplaceResult.builder()
+                .version(version)
+                .saved(true)
+                .diff(diff.withRowsAsStored(dao.findRows(organizationId)))
+                .warnings(List.of())
+                .build();
     }
 
     ModelPriceReplaceResult previewReplaceAll(@NonNull Handle handle, @NonNull String organizationId,

@@ -35,10 +35,16 @@ public interface ModelPriceService {
 
     Mono<ModelPriceReplaceResult> replaceAll(String organizationId, ReplaceRequest request, String userName);
 
-    /** What {@link #replaceAll} would change, without writing anything. */
+    /**
+     * What {@link #replaceAll} would change, without writing anything. Created rows have no audit fields, and their
+     * ids are made up for the preview: the save that follows gives them new ones.
+     */
     Mono<ModelPriceReplaceResult> previewReplaceAll(String organizationId, ReplaceRequest request);
 
-    /** The price layers a workspace's spans are priced with: its organization's rows, or the built-in list only. */
+    /**
+     * The price layers a workspace's spans are priced with: its organization's rows, or the built-in list only. Never
+     * fails: when the organization's rows can't be loaded, it's the built-in list only.
+     */
     Mono<PriceLayers> layersFor(String workspaceId);
 }
 
@@ -68,8 +74,9 @@ class ModelPriceServiceImpl implements ModelPriceService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    // A Mono, not a plain value, so the cache interceptor evicts inside the chain, before the response goes out. A
-    // plain method evicts later in the background, and the next span batch could still read the old prices.
+    // A Mono, not a plain value, so the cache interceptor evicts inside the chain, before the response goes out; a
+    // plain method evicts later in the background. A read that loaded the old list before this save committed can
+    // still cache it after the eviction, and it stays until the model_prices TTL ends it.
     @Override
     @CacheEvict(name = CACHE_NAME, key = "'organization-' + $organizationId")
     public Mono<ModelPriceReplaceResult> replaceAll(@NonNull String organizationId, @NonNull ReplaceRequest request,
@@ -104,7 +111,12 @@ class ModelPriceServiceImpl implements ModelPriceService {
     public Mono<PriceLayers> layersFor(@NonNull String workspaceId) {
         return organizationLookup.organizationOf(workspaceId)
                 .flatMap(organizationId -> findOrganizationList(organizationId).map(ModelPriceList::toLayers))
-                .defaultIfEmpty(PriceLayers.BUILT_IN_ONLY);
+                .defaultIfEmpty(PriceLayers.BUILT_IN_ONLY)
+                .onErrorResume(error -> {
+                    log.warn("Failed to load model prices, workspace '{}', pricing with built-in prices", workspaceId,
+                            error);
+                    return Mono.just(PriceLayers.BUILT_IN_ONLY);
+                });
     }
 
     private CustomModelPriceValidator.Result validate(ReplaceRequest request) {

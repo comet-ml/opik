@@ -11,7 +11,7 @@ public interface WorkspaceOrganizationLookup {
 }
 
 // Opik learns organizations from Comet, which doesn't send them yet. Until then every workspace prices with the
-// built-in list only, and organization price writes are refused.
+// built-in list only.
 class NoWorkspaceOrganizationLookup implements WorkspaceOrganizationLookup {
 
     @Override
