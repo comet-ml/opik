@@ -54,6 +54,7 @@ import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths, cn } from "@/lib/utils";
 import {
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
   getVirtualizationConfig,
 } from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -863,7 +864,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Trace>(),
+      generateSelectColumDef<Trace>(undefined, PAGE_BODY_SELECT_COLUMN_SIZE),
       ...convertColumnDataToColumn<BaseTraceData, Trace>(COLUMN_DATA, {
         columnsOrder,
         selectedColumns,

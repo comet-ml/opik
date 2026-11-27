@@ -40,6 +40,7 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import {
   generateActionsColumDef,
   generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
   getRowId,
 } from "@/shared/DataTable/utils";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -535,7 +536,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     );
 
     return [
-      generateSelectColumDef<Trace>(),
+      generateSelectColumDef<Trace>(undefined, PAGE_BODY_SELECT_COLUMN_SIZE),
       ...injectColumnCallback(
         convertedColumns,
         "thread_id",

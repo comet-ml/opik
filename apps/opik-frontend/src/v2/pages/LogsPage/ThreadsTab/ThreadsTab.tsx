@@ -48,7 +48,10 @@ import {
   migrateSelectedColumns,
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
+} from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
@@ -828,7 +831,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     );
 
     return [
-      generateSelectColumDef<Thread>(),
+      generateSelectColumDef<Thread>(undefined, PAGE_BODY_SELECT_COLUMN_SIZE),
       ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
       ...convertColumnDataToColumn<Thread, Thread>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,

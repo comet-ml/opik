@@ -7,6 +7,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -108,14 +109,14 @@ public class TopicsRunService {
         // A step's failure carries the stats of the steps before it; a timeout cuts the chain from outside, so it
         // carries the bounds, and the phase metric shows how far the run got.
         return timed(run, "window", reader.read(run, windowTraces))
-                .flatMap(window -> cpu(run, "cluster",
-                        () -> algorithm.cluster(window.topicWindow(), maxTopics))
-                        .flatMap(clustering -> timed(run, "llm",
-                                llm.generate(run, clustering.author(), AuthorAnswer::parse))
-                                .flatMap(answer -> cpu(run, "assign",
-                                        () -> assign(run, window, clustering, answer)))
-                                .onErrorMap(error -> TopicsRunException.withStats(error, clustering.stats())))
-                        .onErrorMap(error -> TopicsRunException.withStats(error, window.stats())))
+                // A Flux flatMap lets go of the completed cluster step, and of the window it captured, before the
+                // author call.
+                .flux().flatMap(window -> cpu(run, "cluster", () -> cluster(window, maxTopics))).next()
+                .flatMap(clustered -> timed(run, "llm",
+                        llm.generate(run, clustered.clustering().author(), AuthorAnswer::parse))
+                        .flatMap(answer -> cpu(run, "assign", () -> assign(run, clustered, answer)))
+                        .onErrorMap(error -> TopicsRunException.withStats(error, clustered.clustering().stats()))
+                        .onErrorMap(error -> TopicsRunException.withStats(error, clustered.windowStats())))
                 .flatMap(rows -> timed(run, "save", store.save(run, rows.topics(), rows.otherVectors()))
                         .map(kept -> kept ? rows : rows.discarded())
                         .onErrorMap(error -> TopicsRunException.withStats(error, rows.stats())))
@@ -124,22 +125,44 @@ public class TopicsRunService {
                 .onErrorResume(error -> outcomes.failed(run, error));
     }
 
+    /**
+     * The window's groups, with what the run needs of the window after them: its traces and stats. The window's error
+     * mapping is here, as a lambda capturing the window would keep it through the author call.
+     */
+    private Clustered cluster(RunWindow window, int maxTopics) {
+        try {
+            return Clustered.builder()
+                    .traces(window.traces())
+                    .windowStats(window.stats())
+                    .clustering(algorithm.cluster(window.topicWindow(), maxTopics))
+                    .build();
+        } catch (RuntimeException exception) {
+            throw TopicsRunException.withStats(exception, window.stats());
+        }
+    }
+
+    @Builder(toBuilder = true)
+    private record Clustered(@NonNull List<WindowTrace> traces, @NonNull ObjectNode windowStats,
+            @NonNull Clustering clustering) {
+    }
+
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
-    private TopicRunRows assign(TopicRun run, RunWindow window, Clustering clustering,
-            TopicsLlm.Answer<AuthorAnswer> answer) {
+    private TopicRunRows assign(TopicRun run, Clustered clustered, TopicsLlm.Answer<AuthorAnswer> answer) {
+        var traces = clustered.traces();
+        var clustering = clustered.clustering();
         TopicRunRows rows;
         try {
-            rows = TopicRunRows.of(run, window.traces(), clustering.finish(answer.value()), idGenerator::generateId);
+            rows = TopicRunRows.of(run, traces, clustering.finish(answer.value()), idGenerator::generateId);
         } catch (IllegalArgumentException exception) {
             throw new TopicsRunException(RunError.INVARIANT, exception.getMessage(), exception);
         }
         var stats = TopicRunOutcomes.bounds(run);
-        stats.setAll(window.stats());
+        stats.setAll(clustered.windowStats());
         stats.setAll(clustering.stats());
         stats.setAll(answer.stats());
         stats.setAll(rows.stats());
         log.info("Topics run '{}' built, project '{}', window ['{}', '{}'), vectors '{}', topic sizes '{}', Other "
-                + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), window.texts().length,
+                + "share '{}'", run.runId(), run.projectId(), run.from(), run.to(), traces.size(),
                 rows.topics().stream().map(Topic::size).toList(), TopicText.fixed(rows.otherShare(), 3));
         return rows.toBuilder().stats(stats).build();
     }
