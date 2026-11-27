@@ -466,13 +466,15 @@ class DatabaseAnalyticsFactoryIntegrationTest {
     }
 
     @Test
-    @DisplayName("toString leaves the password out")
-    void toStringLeavesPasswordOut() {
+    @DisplayName("toString leaves the credentials out")
+    void toStringLeavesCredentialsOut() {
+        var username = RandomStringUtils.secure().nextAlphanumeric(16);
         var password = RandomStringUtils.secure().nextAlphanumeric(16);
         var factory = new DatabaseAnalyticsFactory();
+        factory.setUsername(username);
         factory.setPassword(password);
 
-        assertThat(factory.toString()).doesNotContain(password);
+        assertThat(factory.toString()).doesNotContain(username, password);
     }
 
     private Map<String, String> readSettings(ConnectionFactory connectionFactory, String... names) {

@@ -26,7 +26,9 @@ import java.util.stream.Collectors;
 @Data
 public class DatabaseAnalyticsFactory {
 
-    // No credentials in the URL: passed as options, the driver encodes them, so reserved characters can't break it.
+    /**
+     * No credentials in the URL: they are passed as options, so reserved characters in them cannot break it.
+     */
     private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
@@ -48,6 +50,7 @@ public class DatabaseAnalyticsFactory {
     private @NotNull Protocol protocol;
     private @NotBlank String host;
     private int port;
+    @ToString.Exclude
     private @NotBlank String username;
     @ToString.Exclude
     private @NotNull String password;
