@@ -68,17 +68,17 @@ class TopicMerger {
 
     /**
      * The rename call for {@code merges}, then per topic that took others its name. {@code merged} gives the call's
-     * entry for such a topic from its {@link #members}; the names of the other {@code candidates} still standing are
+     * entry for such a topic from its {@link #members}; the names of the other {@code live} topics still standing are
      * taken.
      *
-     * @param candidates the live topic indices; a folded one is skipped
+     * @param live the live topic indices; a folded one is skipped
      */
-    static NightStep<Map<Integer, Name>> rename(@NonNull List<Merge> merges, int topicCount, @NonNull int[] candidates,
+    static NightStep<Map<Integer, Name>> rename(@NonNull List<Merge> merges, int topicCount, @NonNull int[] live,
             @NonNull IntFunction<String> nameOf, @NonNull BiFunction<Integer, List<Integer>, Merged> merged,
             @NonNull TopicTasks tasks) {
         var roots = roots(topicCount, merges);
         var renamed = merges.stream().map(merge -> roots[merge.kept()]).distinct().sorted().toList();
-        var taken = Arrays.stream(candidates).filter(t -> roots[t] == t && !renamed.contains(t))
+        var taken = Arrays.stream(live).filter(t -> roots[t] == t && !renamed.contains(t))
                 .mapToObj(nameOf).collect(Collectors.toSet());
         var entries = renamed.stream().map(root -> merged.apply(root, members(roots, root))).toList();
         return rename(entries, taken, tasks).map(names -> {
