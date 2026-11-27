@@ -5,6 +5,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.ClaudePlatformMappingRules;
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.domain.mapping.otel.ProviderResolvers;
@@ -58,6 +59,17 @@ public class OpenTelemetryMapper {
      * @return a converted Opik Span
      */
     public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName) {
+        return toOpikSpan(otelSpan, opikTraceId, integrationName, null);
+    }
+
+    /**
+     * Same as {@link #toOpikSpan(Span, UUID, String)}, with the instrumentation scope of the span, which picks the
+     * integration rules for this span alone (an OTLP batch can mix scopes).
+     *
+     * @param scopeName the instrumentation scope name of the span (may be null)
+     */
+    public static com.comet.opik.api.Span toOpikSpan(Span otelSpan, UUID opikTraceId, String integrationName,
+            String scopeName) {
         var traceTimestamp = extractTimestampFromUUIDv7(opikTraceId);
 
         var startTimeMs = Duration.ofNanos(otelSpan.getStartTimeUnixNano()).toMillis();
@@ -114,7 +126,7 @@ public class OpenTelemetryMapper {
 
         List<Span.Event> events = otelSpan.getEventsList();
         enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events,
-                otelSpan.getName());
+                otelSpan.getName(), ClaudePlatformMappingRules.isClaudePlatformScope(scopeName));
 
         extractErrorInfo(otelSpan).ifPresent(spanBuilder::errorInfo);
 
@@ -149,6 +161,11 @@ public class OpenTelemetryMapper {
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
             String integrationName, List<Span.Event> events, String spanName) {
+        enrichSpanWithAttributes(spanBuilder, attributes, integrationName, events, spanName, false);
+    }
+
+    private static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
+            String integrationName, List<Span.Event> events, String spanName, boolean isClaudePlatform) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
@@ -161,7 +178,7 @@ public class OpenTelemetryMapper {
         // batch can mix scopes from more than one integration, so gating this on the batch-wide
         // value could misroute a non-Claude span or skip routing for a real Claude Code span.
         boolean isClaudeCode = OpenTelemetryMappingRuleFactory.isClaudeCodeSpan(spanName);
-        ObjectNode defaultBucket = isClaudeCode ? metadata : input;
+        ObjectNode defaultBucket = isClaudeCode || isClaudePlatform ? metadata : input;
 
         // Hold model and provider until the attribute loop completes so we can apply
         // post-processing (e.g. Elastic Inference Service routing) that needs both values.
@@ -189,7 +206,9 @@ public class OpenTelemetryMapper {
                 continue;
             }
 
-            var ruleOpt = OpenTelemetryMappingRuleFactory.findRule(key, isClaudeCode);
+            var ruleOpt = isClaudePlatform
+                    ? OpenTelemetryMappingRuleFactory.findClaudePlatformRule(key)
+                    : OpenTelemetryMappingRuleFactory.findRule(key, isClaudeCode);
 
             if (ruleOpt.isEmpty()) {
                 log.debug("No rule found for unmapped attribute key '{}'. Using default bucket.", key);
@@ -298,8 +317,18 @@ public class OpenTelemetryMapper {
 
         // Agent-run spans (gen_ai.operation.name=invoke_agent) are not LLM calls. Other attributes
         // on them (e.g. gen_ai.system_instructions) would otherwise type them as llm; force general.
-        if ("invoke_agent".equals(metadata.path("gen_ai.operation.name").asText(null))) {
+        var operationName = metadata.path("gen_ai.operation.name").asText(null);
+        if ("invoke_agent".equals(operationName)) {
             spanBuilder.type(SpanType.general);
+        }
+        // Claude API spans name their operation on every span that is an LLM call or a tool use, also when content
+        // capture is off, and request spans such as anthropic.sessions.create carry a model without being LLM calls.
+        if (isClaudePlatform) {
+            spanBuilder.type(switch (StringUtils.defaultString(operationName)) {
+                case "chat" -> SpanType.llm;
+                case "execute_tool" -> SpanType.tool;
+                default -> SpanType.general;
+            });
         }
 
         if (model != null) {

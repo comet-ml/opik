@@ -30,7 +30,9 @@ public class OpenTelemetryMappingUtils {
             // Claude Code emits short cache-token names; normalize to the names the Anthropic
             // cache-cost path (SpanCostCalculator) recognizes, otherwise cache pricing is skipped.
             "cache_read_tokens", "cache_read_input_tokens",
-            "cache_creation_tokens", "cache_creation_input_tokens");
+            "cache_creation_tokens", "cache_creation_input_tokens",
+            // The Claude API names the GenAI cache-creation counter cache_write.input_tokens.
+            "cache_write.input_tokens", "cache_creation.input_tokens");
 
     /**
      * Extracts a value from an AnyValue object and writes it to a specified JSON field in an ObjectNode.
