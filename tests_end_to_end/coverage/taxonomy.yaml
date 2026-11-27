@@ -1595,6 +1595,47 @@ areas:
       projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
       project-home:  { covered: false, state: default }
 
+  # Workspace-level guardrail POLICIES: the Guardrails nav entry and the page
+  # behind it (GuardrailsPage at /$workspaceName/guardrails). Its own area
+  # rather than keys under `configuration` — it is a nav entry of its own, with
+  # its own backend resource (GuardrailPoliciesResource) and its own docs
+  # section, and `configuration` already carries 19 keys.
+  #
+  # The boundary against `traces`: this area owns AUTHORING a stored policy.
+  # What a guardrail did to a trace stays in traces.set-guardrail and
+  # traces.guardrail-results, which are gated by a different flag
+  # (GUARDRAILS_ENABLED, default on) than this page is.
+  #
+  # NOT cloud_only, deliberately. The page is gated by the
+  # GUARDRAILS_VALIDATIONS_ENABLED toggle, which the self-hosted backend has as
+  # serviceToggles.guardrailsValidationsEnabled (TOGGLE_GUARDRAILS_VALIDATIONS_
+  # ENABLED, requires OPIK_INFERENCE_URL). The `comet` plugin's
+  # getGuardrailsEnabled narrows it further to organizations with the feature
+  # on, but useGuardrailsEnabled falls back to the toggle alone when no plugin
+  # supplies it — so the surface does exist self-hosted.
+  guardrails:
+    label: Guardrails
+    nav_group: Workspace
+    routes: ["/$workspaceName/guardrails"]
+    specs: []
+    capabilities:
+      list-policies:          { covered: false, note: "GuardrailsPage's table over GET /v1/private/guardrails/policies/ — the Rules and Execution scope columns, sorting, pagination, the column picker, and the no-policies empty state" }
+      search-policies:        { covered: false, note: "SearchInput — `search` on the list request rather than a client-side filter, so an empty result is 'no matching data' and not the empty state" }
+      create-policy:          { covered: false, note: "GuardrailPolicyPanel mode=create — POST; name, optional description, execution scope and rules" }
+      edit-policy:            { covered: false, note: "GuardrailPolicyPanel mode=edit, opened by a row click or the row menu — PUT REPLACES the policy, rules included: a rule left out of the request is removed" }
+      duplicate-policy:       { covered: false, note: "row menu Duplicate — prefilled 'X (copy)', then 'X (copy 2)' past the names on the page, compared case-insensitively as the backend matches them" }
+      delete-policy:          { covered: false, note: "both entry points, each behind ConfirmDialog — the row menu, and the toolbar over a row selection, which issues one DELETE per id" }
+      pii-rule:               { covered: false, note: "the PII toggle and its entity picker. Split per rule type, following online-evaluation's create-llm-judge-rule / create-python-rule" }
+      topic-rule:             { covered: false, note: "the Topic toggle and its restricted / allowed topic lists" }
+      prompt-injection-rule:  { covered: false, note: "the Prompt injection toggle — nothing to configure, so what a test asserts is that the rule round-trips" }
+      execution-scope:        { covered: false, note: "the On request / Global radio; Global applies to every application in the workspace whether or not it names the policy" }
+      policy-form-validation: { covered: false, note: "name required and capped at 255, description at 1000, at least one rule switched on, PII needs a category, Topic needs a list and refuses a topic that is in both — plus the backend's 409 on a taken name arriving as an inline error on the name field" }
+      policy-deep-link:       { covered: false, note: "?policyId= opens the panel — a policy has no route of its own; an id that was deleted or fails to load drops the param and toasts rather than leaving a panel that never opens" }
+
+    visual:
+      guardrails-empty: { covered: false, state: empty }
+      guardrails-list:  { covered: false, state: default }
+
   configuration:
     label: Configuration
     nav_group: Workspace
