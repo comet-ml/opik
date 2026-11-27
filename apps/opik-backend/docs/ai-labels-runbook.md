@@ -863,9 +863,9 @@ does) and the saved list, then:
 1. Assigns every trace it read to its nearest prototype at `TOPICS_ALGORITHM_ASSIGN_MIN_COSINE` (default 0.75), with
    the `TOPICS_ALGORITHM_OTHER_GATE` (0.95) gate on known Other: a topic, known Other, or unassigned.
 2. Groups the Other traces by k-means when they number `TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE` (20) or more. A group
-   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (2%) of the window or more.
+   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (1%) of the window or more.
 3. Makes one `naming` call (task `topics/tasks/naming.yaml`) for the candidates at
-   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.80) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
+   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.77) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
    new topic, or sends them to Other. Candidates given to a topic are checked by one `verify_naming` call
    (`verify.yaml`); the rejected ones go to one `naming_new` call (`naming_new.yaml`), which offers a new topic or
    Other only. A new topic is born only at the big share; on a full list (`TOPICS_ALGORITHM_MAX_TOPICS`, 10) it replaces

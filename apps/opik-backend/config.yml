@@ -2883,13 +2883,14 @@ topics:
     #  Default: 3
     #  Description: Low nights in a row that retire a topic. A topic that holds no trace retires the same night
     retireNights: ${TOPICS_ALGORITHM_RETIRE_NIGHTS:-3}
-    #  Default: 0.80
-    #  Description: Nightly: a candidate group whose tightness is below this is known Other without a naming call
-    nightlyMinTightness: ${TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS:-0.80}
-    #  Default: 0.02
+    #  Default: 0.77
+    #  Description: Nightly: a candidate group whose tightness is below this is known Other without a naming call.
+    #  A little above assignMinCosine: a group must be tighter than a topic's loosest members to be named
+    nightlyMinTightness: ${TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS:-0.77}
+    #  Default: 0.01
     #  Description: Nightly: a candidate whose share of the window is at least this is big, and a new topic needs its
-    #  groups' share to be at least this
-    nightlyBigShare: ${TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE:-0.02}
+    #  groups' share to be at least this. Twice retireShare, so a new topic is not retired the nights after its birth
+    nightlyBigShare: ${TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE:-0.01}
     #  Default: 0.95
     #  Description: Nightly: a known-Other prototype within this cosine of one already kept is not kept again
     nightlySameMemory: ${TOPICS_ALGORITHM_NIGHTLY_SAME_MEMORY:-0.95}
@@ -2926,10 +2927,10 @@ topics:
     #  Default: 120s
     #  Description: The deadline of the LLM call that names the groups. At most 300s, under projectTimeout
     llmDeadline: ${TOPICS_RUN_LLM_DEADLINE:-120s}
-    #  Default: 30s
+    #  Default: 120s
     #  Description: The deadline of a nightly update's naming calls (the groups left in Other). At most 300s, under
     #  projectTimeout
-    namingDeadline: ${TOPICS_RUN_NAMING_DEADLINE:-30s}
+    namingDeadline: ${TOPICS_RUN_NAMING_DEADLINE:-120s}
     #  Default: 60s
     #  Description: The deadline of a nightly update's verify call. At most 300s, under projectTimeout
     verifyDeadline: ${TOPICS_RUN_VERIFY_DEADLINE:-60s}
