@@ -734,20 +734,21 @@ def test_track__single_generator_function_tracked__consumer_stops_early__span_en
     assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
 
 
-def test_track__single_generator_function_tracked__closed_explicitly__span_ended_with_what_was_yielded(
+def test_track__single_generator_function_tracked__closed_explicitly__result_preserved_and_span_ended(
     fake_backend,
 ):
-    # `close()` is what the interpreter calls on a dropped generator, and what
-    # `contextlib.closing` calls; it must end the span the same way.
-    @tracker.track
     def f(x):
-        values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
+        try:
+            yield "yielded-1"
+        except GeneratorExit:
+            return "close-result"
 
-    generator = f("generator-input")
-    next(iter(generator))
-    generator.close()
+    native_generator = f("generator-input")
+    tracked_generator = tracker.track(f)("generator-input")
+    assert next(native_generator) == next(tracked_generator) == "yielded-1"
+
+    # The native generator returns a value from close() starting in Python 3.13.
+    assert tracked_generator.close() == native_generator.close()
 
     tracker.flush_tracker()
 
