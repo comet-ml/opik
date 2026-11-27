@@ -338,6 +338,14 @@ customCharts:
   #  Description: Cap on distinct ids resolved to names in one result. Above it no row gets a name column, rather
   #   than labelling some and not others.
   maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
+  #  Default: 4
+  #  Description: How many free-form SQL queries one workspace may run at once, across every backend pod. Counts the
+  #   public analytics-queries endpoint and the dashboard and Insights Views widget queries; above it they answer 429
+  #   with Retry-After. Ollie's chart authoring (POST /v1/internal/analytics-queries) is not counted: our
+  #   internal model runs those queries.
+  #   Keep it below the EXTENDED account's per-replica max_concurrent_queries_for_user.
+  #   If Redis is unreachable the limit is skipped and only that ClickHouse cap applies.
+  maxConcurrentQueriesPerWorkspace: ${CUSTOM_CHARTS_MAX_CONCURRENT_QUERIES_PER_WORKSPACE:-4}
 
 # Description: the free-form SQL post-run check, defense in depth on top of the row policies. It verifies from each
 #   query's system.query_log entries and plan that every table it read was read under a row policy.

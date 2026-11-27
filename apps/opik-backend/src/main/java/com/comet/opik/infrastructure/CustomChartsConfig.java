@@ -51,4 +51,15 @@ public class CustomChartsConfig {
      */
     @JsonProperty
     private @Min(1) @Max(50_000) int maxNameLookupIds = 5_000;
+
+    /**
+     * How many dashboard and Insights Views widget queries plus public analytics-queries calls one workspace may run at
+     * once across every backend pod. Keep it below the EXTENDED account's per-replica
+     * {@code max_concurrent_queries_for_user}, so these callers in one workspace cannot take the whole cap.
+     *
+     * <p>Ollie's chart authoring on {@code POST /v1/internal/analytics-queries} is deliberately not counted: those
+     * queries come from our internal model, not from users' clients.
+     */
+    @JsonProperty
+    private @Min(1) @Max(50) int maxConcurrentQueriesPerWorkspace = 4;
 }
