@@ -20,8 +20,9 @@ const renderHint = (region?: OpenRouterRegion) => {
 
 describe("OpenRouterRegionHint", () => {
   it.each([
-    ["eu", "Region: European Union (set by your administrator)"],
-    ["us", "Region: United States (set by your administrator)"],
+    ["global", "Region: Global"],
+    ["eu", "Region: European Union"],
+    ["us", "Region: United States"],
   ] as const)("shows the %s region", (region, text) => {
     renderHint(region);
 
@@ -30,14 +31,11 @@ describe("OpenRouterRegionHint", () => {
     );
   });
 
-  it.each(["global", "unknown", undefined] as const)(
-    "shows nothing for %s",
-    (region) => {
-      renderHint(region);
+  it.each(["unknown", undefined] as const)("shows nothing for %s", (region) => {
+    renderHint(region);
 
-      expect(
-        screen.queryByTestId("openrouter-region-hint"),
-      ).not.toBeInTheDocument();
-    },
-  );
+    expect(
+      screen.queryByTestId("openrouter-region-hint"),
+    ).not.toBeInTheDocument();
+  });
 });

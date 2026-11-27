@@ -10,18 +10,16 @@ const JEV_MODELS = ["~typesafe/jev-latest", "typesafe/jev-1.13"];
 
 describe("getOpenRouterRegionName", () => {
   it.each([
+    ["global", "Global"],
     ["eu", "European Union"],
     ["us", "United States"],
   ] as const)("names the %s region", (region, name) => {
     expect(getOpenRouterRegionName(region)).toBe(name);
   });
 
-  it.each(["global", "unknown", undefined] as const)(
-    "names nothing for %s",
-    (region) => {
-      expect(getOpenRouterRegionName(region)).toBeUndefined();
-    },
-  );
+  it.each(["unknown", undefined] as const)("names nothing for %s", (region) => {
+    expect(getOpenRouterRegionName(region)).toBeUndefined();
+  });
 });
 
 describe("getDecisionModelUnavailableReason", () => {

@@ -16,7 +16,7 @@ const OpenRouterRegionHint: React.FC = () => {
       className="comet-body-s mt-1 text-light-slate"
       data-testid="openrouter-region-hint"
     >
-      {`Region: ${regionName} (set by your administrator)`}
+      {`Region: ${regionName}`}
     </span>
   );
 };

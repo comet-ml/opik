@@ -4,15 +4,21 @@ import {
   DECISION_MODELS_OPENROUTER_REGIONS,
 } from "@/constants/decisionModels";
 
+const OPENROUTER_REGION_NAMES: Partial<Record<OpenRouterRegion, string>> = {
+  global: "Global",
+  eu: "European Union",
+  us: "United States",
+};
+
 const REGIONAL_OPENROUTER_REGIONS: Partial<
-  Record<OpenRouterRegion, { name: string; shortName: string }>
+  Record<OpenRouterRegion, { shortName: string }>
 > = {
-  eu: { name: "European Union", shortName: "EU" },
-  us: { name: "United States", shortName: "US" },
+  eu: { shortName: "EU" },
+  us: { shortName: "US" },
 };
 
 export const getOpenRouterRegionName = (region?: OpenRouterRegion) =>
-  region ? REGIONAL_OPENROUTER_REGIONS[region]?.name : undefined;
+  region ? OPENROUTER_REGION_NAMES[region] : undefined;
 
 export const getDecisionModelUnavailableReason = (
   model: string,
