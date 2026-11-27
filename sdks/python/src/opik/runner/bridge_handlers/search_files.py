@@ -72,7 +72,8 @@ class SearchFilesHandler(BaseHandler):
                 cmd,
                 cwd=str(self._repo_root),
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=min(timeout, 30.0),
             )
         except subprocess.TimeoutExpired:
