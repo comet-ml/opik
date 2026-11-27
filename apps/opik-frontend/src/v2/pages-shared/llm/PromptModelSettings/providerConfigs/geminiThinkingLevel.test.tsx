@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+// The Gemini and Vertex AI panels embed the real CodeMirror editor for extra body parameters, which does not
+// mount under this environment (a duplicate @codemirror/state breaks its instanceof checks).
+vi.mock("@uiw/react-codemirror", () => ({
+  default: () => <div data-testid="codemirror-stub" />,
+}));
+
 import GeminiModelConfigs from "./GeminiModelConfigs";
 import VertexAIModelConfigs from "./VertexAIModelConfigs";
 import { GeminiThinkingLevel, PROVIDER_MODEL_TYPE } from "@/types/providers";

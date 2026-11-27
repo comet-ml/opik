@@ -125,6 +125,7 @@ const getGeminiFamilyVisibleControls = (
     thinkingLevel: showThinkingLevel,
     throttling: supports("throttling"),
     maxConcurrentRequests: supports("maxConcurrentRequests"),
+    customParameters: supports("customParameters"),
   };
 };
 
@@ -257,12 +258,14 @@ export const hasVisibleControls = (
     case PROVIDER_TYPE.GEMINI: {
       const params = getGeminiOrVertexListedParams(model);
       if (params) {
-        return hasGenericControls(
-          params,
-          GEMINI_PANEL,
-          configs as Record<string, unknown>,
-          unsupportedParams,
-          model,
+        return (
+          hasGenericControls(
+            params,
+            GEMINI_PANEL,
+            configs as Record<string, unknown>,
+            unsupportedParams,
+            model,
+          ) || supports("customParameters")
         );
       }
       return isAnyControlVisible(
@@ -276,12 +279,14 @@ export const hasVisibleControls = (
     case PROVIDER_TYPE.VERTEX_AI: {
       const params = getGeminiOrVertexListedParams(model);
       if (params) {
-        return hasGenericControls(
-          params,
-          VERTEX_AI_PANEL,
-          configs as Record<string, unknown>,
-          unsupportedParams,
-          model,
+        return (
+          hasGenericControls(
+            params,
+            VERTEX_AI_PANEL,
+            configs as Record<string, unknown>,
+            unsupportedParams,
+            model,
+          ) || supports("customParameters")
         );
       }
       return isAnyControlVisible(

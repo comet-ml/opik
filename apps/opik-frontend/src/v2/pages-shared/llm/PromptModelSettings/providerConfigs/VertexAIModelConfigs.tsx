@@ -5,6 +5,7 @@ import {
   GeminiThinkingLevel,
   LLMVertexAIConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
@@ -28,6 +29,7 @@ import {
   resolveThinkingLevel,
 } from "@/lib/modelUtils";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
+import GeminiExtraBodyParameters from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/GeminiExtraBodyParameters";
 
 interface VertexAIModelConfigsProps {
   configs: LLMVertexAIConfigsType;
@@ -160,6 +162,14 @@ const VertexAIModelConfigs = ({
           tooltip={
             <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
           }
+        />
+      )}
+
+      {visible.customParameters && (
+        <GeminiExtraBodyParameters
+          provider={PROVIDER_TYPE.VERTEX_AI}
+          customParameters={configs.custom_parameters}
+          onChange={onChange}
         />
       )}
     </div>

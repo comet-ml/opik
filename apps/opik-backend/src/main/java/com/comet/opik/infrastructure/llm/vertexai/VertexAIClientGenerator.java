@@ -4,6 +4,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.http.OneShotRequestBodies;
+import com.comet.opik.infrastructure.llm.GeminiCustomParameters;
 import com.comet.opik.infrastructure.llm.GeminiMaxOutputTokens;
 import com.comet.opik.infrastructure.llm.GeminiThinkingParams;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
@@ -123,6 +124,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
+            GeminiCustomParameters.merger(request.customParameters())
+                    .ifPresent(builder::generateContentConfigCustomizer);
 
             return new VertexAiChatModel(builder.build(), client, remoteMediaInliner);
         });
@@ -144,6 +147,8 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
             Optional.ofNullable(request.seed()).ifPresent(builder::seed);
 
             applyThinking(builder::thinkingLevel, builder::thinkingBudget, model, request.customParameters());
+            GeminiCustomParameters.merger(request.customParameters())
+                    .ifPresent(builder::generateContentConfigCustomizer);
 
             return new VertexAiStreamingChatModel(builder.build(), client, calls, remoteMediaInliner);
         });
@@ -312,11 +317,14 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
         // Round-tripped through the request so the generation config is derived in one place for both paths.
         // Only an object converts to a Map: custom_parameters is unvalidated free-form JSON, and Jackson throws
         // IllegalArgumentException on an array or scalar, which would fail the whole run rather than be ignored.
+        // A judge takes only the thinking level from them for now: a rule saved before custom parameters reached
+        // Gemini may hold keys Google doesn't take, and those would now fail every score.
         Optional.ofNullable(modelParameters.customParameters())
                 .filter(JsonNode::isObject)
                 .map(customParameters -> JsonUtils.getMapper()
                         .convertValue(customParameters, new TypeReference<Map<String, Object>>() {
                         }))
+                .map(GeminiCustomParameters::thinkingOnly)
                 .ifPresent(requestBuilder::customParameters);
 
         // The SDK's retries sit under the model's, so they would multiply; the judge's retries are the model's alone.
