@@ -9,22 +9,24 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The batched verify call of the naming step ({@link TopicTasks#verify()}, whose {@code max_tokens} is the base the
  * call adds {@code nightlyVerifyTokensPerPair} per pair to): every group the naming gave to a live topic goes into one LLM call,
  * groups largest first. An answer entry counts when its {@code pair} is an integer in range and its {@code same} is a
- * boolean. A pair without such an answer, or answered both ways, is not verified. A failed call fails the run.
+ * boolean. A pair without such an answer, or answered both ways, is not verified.
  */
 @UtilityClass
 class Verifier {
 
     /**
      * One batched verify call, then the verdict per pair index that got a valid answer. A bad answer verifies no pair.
-     * A failed call (timeout or error) fails the run before the step goes on: read as "no pair verified", it would turn
-     * sound assigns into new topics.
+     * A failed call (timeout or error) gives no verdicts at all (empty): read as "no pair verified", it would send
+     * sound assigns on to the new-topic call.
      */
-    static NightStep<Map<Integer, Boolean>> ask(String tag, List<TopicPrompts.VerifyPair> prompts, AiLabelTask task,
+    static NightStep<Optional<Map<Integer, Boolean>>> ask(String tag, List<TopicPrompts.VerifyPair> prompts,
+            AiLabelTask task,
             AlgorithmConfig config) {
         var request = LlmRequest.builder()
                 .call(LlmCall.VERIFY)
@@ -36,7 +38,8 @@ class Verifier {
                 // has at most nightlyMaxGroups pairs, and KMeansTopicAlgorithm checks that budget at startup.
                 .maxTokens(maxTokens(task, config, prompts.size()))
                 .build();
-        return NightStep.ask(request, answer -> NightStep.done(verdicts(answer, prompts.size())));
+        return NightStep.ask(request, answer -> NightStep.done(Optional.of(verdicts(answer, prompts.size()))),
+                () -> NightStep.done(Optional.empty()));
     }
 
     /** The verify call's max_tokens for {@code pairs} pairs: the task's base plus the config's tokens per pair. */

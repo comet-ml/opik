@@ -135,7 +135,8 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /**
      * {@link NightlyUpdate} over the saved list. An answer that is not a JSON object (null) leaves its groups in Other;
-     * for the verify call, it verifies no pair.
+     * for the verify call, it verifies no pair. A failed call leaves its groups in Other tonight only
+     * ({@code other_failed}).
      */
     @Override
     public NightStep<TopicUpdate> update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics) {
