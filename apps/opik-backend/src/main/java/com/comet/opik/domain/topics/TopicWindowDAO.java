@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.TopicsConfig.ReadGuards;
 import com.google.common.base.Preconditions;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -32,7 +33,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 /**
  * A topic run's reads of {@code topic_vectors}, the {@link TopicEmbedding#SUMMARY_TASK} rows: how many traces some
- * projects have in a window, one project's window, and the part of it the labelling pass has not labelled yet. A trace
+ * projects have in a window, one project's window, and the labelling pass's pages of it. A trace
  * counts once: a relabel with a higher task version adds a row, and the window keeps the highest.
  */
 @Singleton
@@ -176,17 +177,23 @@ public class TopicWindowDAO {
 
     /**
      * One page of the labelling pass: the first {@code :limit} traces after {@code :after}, in trace id order, of the
-     * part of the window in {@code [from, to)} that has no {@code trace_topics} row of the run yet, each with its
-     * highest live task version's vector. The keys are chosen as in {@link #READ_WINDOW}. A trace with any row of the
-     * run is done: the run's own insert or an earlier pass wrote it, so a pass that was cut goes on where it stopped. A
-     * {@code trace_topics} row is deleted only together with its trace's vector, so any row of the run counts and no
-     * dedup is needed. {@code :after} bounds both reads by the sort key, so a page reads only the rest of its slice.
+     * part of the window in {@code [from, to)}, each with its highest live task version's vector (keys chosen as in
+     * {@link #READ_WINDOW}), its current topic and whether that topic is stale. The current topic is the one readers
+     * see: the latest {@code trace_topics} row's, null when the trace has none or that row is a tombstone. It is stale
+     * when it is null or was written before the vector: every labeller labels a vector after it is written, so a fresh
+     * topic was given to this vector. {@code :after} bounds every read by the sort key, so a page reads only the rest
+     * of its slice.
+     *
+     * <p>With {@code stale_only}, the page holds only stale traces, chosen before the vectors are read, so a pass that
+     * finds few reads few vectors; their current topic is not returned. {@code join_use_nulls} makes a trace with no
+     * {@code trace_topics} row join as nulls, not as default values.
      */
-    private static final String READ_UNLABELLED = """
+    private static final String READ_PAGE = """
             WITH keys AS (
-                SELECT trace_id, max(task_version) AS task_version
+                SELECT trace_id, max(task_version) AS version, argMax(updated_at, task_version) AS vector_at
                 FROM (
-                    SELECT trace_id, task_version, argMax(is_deleted, (last_updated_at, is_deleted = 0)) AS deleted
+                    SELECT trace_id, task_version, argMax(is_deleted, (last_updated_at, is_deleted = 0)) AS deleted,
+                        max(last_updated_at) AS updated_at
                     FROM topic_vectors
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -197,37 +204,58 @@ public class TopicWindowDAO {
                     GROUP BY trace_id, task_version
                 )
                 WHERE deleted = 0
-                AND trace_id NOT IN (
-                    SELECT trace_id
-                    FROM trace_topics
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND trace_id > :after
-                    AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
-                    AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
-                    AND source = 'run'
-                    AND run_id = :run_id
-                    AND is_deleted = 0
-                )
                 GROUP BY trace_id
+            ),
+            labels AS (
+                SELECT trace_id, argMax(topic_id, (last_updated_at, source = 'run')) AS topic_id,
+                    argMax(is_deleted, (last_updated_at, source = 'run')) AS deleted, max(last_updated_at) AS labelled_at
+                FROM trace_topics
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_id > :after
+                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
+                GROUP BY trace_id
+            ),
+            page AS (
+                <if(stale_only)>
+                SELECT keys.trace_id AS trace_id, keys.version AS task_version
+                FROM keys LEFT JOIN labels ON keys.trace_id = labels.trace_id
+                WHERE labels.trace_id IS NULL OR labels.deleted = 1 OR labels.labelled_at \\< keys.vector_at
+                <else>
+                SELECT trace_id, version AS task_version
+                FROM keys
+                <endif>
                 ORDER BY trace_id
                 LIMIT :limit
             )
-            SELECT trace_id, trace_created_at, CAST(vector AS Array(Float32)) AS vector
-            FROM topic_vectors
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND task = :task
-            AND trace_id > :after
-            AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
-            AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
-            AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM keys)
-            AND is_deleted = 0
-            ORDER BY trace_id, last_updated_at DESC
-            LIMIT 1 BY trace_id
+            SELECT v.trace_id AS trace_id, v.trace_created_at AS trace_created_at, v.vector AS vector,
+                <if(stale_only)>
+                CAST(NULL AS Nullable(String)) AS topic_id, 1 AS stale
+                <else>
+                if(labels.deleted = 0, labels.topic_id, NULL) AS topic_id,
+                labels.trace_id IS NULL OR labels.deleted = 1 OR labels.labelled_at \\< v.vector_at AS stale
+                <endif>
+            FROM (
+                SELECT trace_id, trace_created_at, CAST(vector AS Array(Float32)) AS vector, last_updated_at AS vector_at
+                FROM topic_vectors
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND task = :task
+                AND trace_id > :after
+                AND trace_created_at >= parseDateTime64BestEffort(:window_from, 6, 'UTC')
+                AND trace_created_at \\< parseDateTime64BestEffort(:window_to, 6, 'UTC')
+                AND (trace_id, task_version) IN (SELECT trace_id, task_version FROM page)
+                AND is_deleted = 0
+                ORDER BY trace_id, last_updated_at DESC
+                LIMIT 1 BY trace_id
+            ) AS v
+            <if(!stale_only)>
+            LEFT JOIN labels ON v.trace_id = labels.trace_id
+            <endif>
             SETTINGS max_threads = <max_threads>, max_execution_time = <max_execution_time>, max_rows_to_read = <max_rows_to_read>,
                 max_memory_usage = <max_memory_usage>, priority = <priority>, max_block_size = <max_block_size>,
-                optimize_read_in_order = 0, log_comment = '<log_comment>'
+                optimize_read_in_order = 0, join_use_nulls = 1, log_comment = '<log_comment>'
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -338,36 +366,42 @@ public class TopicWindowDAO {
     }
 
     /**
-     * One page of {@link #READ_UNLABELLED} in the workspace of the Reactor context; {@code after} is a trace id, or the
-     * empty string for the slice's start.
+     * One page of {@link #READ_PAGE} in the workspace of the Reactor context; {@code after} is a trace id, or the
+     * empty string for the slice's start. Not in trace id order.
      */
-    public Flux<WindowVector> readUnlabelled(@NonNull UUID projectId, @NonNull UUID runId, @NonNull Instant from,
-            @NonNull Instant to, @NonNull String after, int limit, long maxExecutionSeconds) {
-        return makeFluxContextAware((userName, workspaceId) -> readUnlabelled(workspaceId, projectId, runId, from, to,
-                after, limit, maxExecutionSeconds));
+    public Flux<WindowVector> readPage(@NonNull UUID projectId, @NonNull Instant from, @NonNull Instant to,
+            @NonNull String after, int limit, boolean staleOnly, long maxExecutionSeconds) {
+        return makeFluxContextAware((userName, workspaceId) -> readPage(workspaceId, projectId, from, to, after,
+                limit, staleOnly, maxExecutionSeconds));
     }
 
-    private Flux<WindowVector> readUnlabelled(String workspaceId, UUID projectId, UUID runId, Instant from,
-            Instant to, String after, int limit, long maxExecutionSeconds) {
-        var template = getSTWithLogComment(READ_UNLABELLED, "topics:read_unlabelled", workspaceId, null,
-                "project_id=%s, run_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, runId, from, to, limit));
+    private Flux<WindowVector> readPage(String workspaceId, UUID projectId, Instant from, Instant to, String after,
+            int limit, boolean staleOnly, long maxExecutionSeconds) {
+        var template = getSTWithLogComment(READ_PAGE, staleOnly ? "topics:read_stale" : "topics:read_relabel",
+                workspaceId, null, "project_id=%s, from=%s, to=%s, limit=%d".formatted(projectId, from, to, limit));
         withGuards(template, config.getRun().getRead(), maxExecutionSeconds);
+        template.add("stale_only", staleOnly);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("task", TopicEmbedding.SUMMARY_TASK)
                         .bind("project_id", projectId.toString())
-                        .bind("run_id", runId.toString())
                         .bind("window_from", from.toString())
                         .bind("window_to", to.toString())
                         .bind("after", after)
                         .bind("limit", limit)
                         .execute())
-                .flatMap(result -> result.map((row, metadata) -> WindowVector.builder()
-                        .traceId(UUID.fromString(row.get("trace_id", String.class)))
-                        .traceCreatedAt(row.get("trace_created_at", Instant.class))
-                        .vector(toVector(row))
-                        .build()));
+                .flatMap(result -> result.map((row, metadata) -> {
+                    var topicId = row.get("topic_id", String.class);
+                    var stale = row.get("stale", Object.class);
+                    return WindowVector.builder()
+                            .traceId(UUID.fromString(row.get("trace_id", String.class)))
+                            .traceCreatedAt(row.get("trace_created_at", Instant.class))
+                            .vector(toVector(row))
+                            .topicId(topicId == null ? null : UUID.fromString(topicId))
+                            .stale(stale == null || ((Number) stale).intValue() != 0)
+                            .build();
+                }));
     }
 
     /** Validated config numbers, never input: {@code topics.run.read} for the run, {@code topics.read} for the API. */
@@ -407,17 +441,7 @@ public class TopicWindowDAO {
                 vector[i] = ((Number) Array.get(array, i)).floatValue();
             }
         }
-        double norm = 0;
-        for (float value : vector) {
-            norm += (double) value * value;
-        }
-        if (norm > 0) {
-            float scale = (float) (1 / Math.sqrt(norm));
-            for (int i = 0; i < vector.length; i++) {
-                vector[i] *= scale;
-            }
-        }
-        return vector;
+        return TopicEmbedding.toUnit(vector);
     }
 
     /** A window's live traces and the inner bounds of its slices, ascending; empty when it fits one slice. */
@@ -431,8 +455,12 @@ public class TopicWindowDAO {
             @NonNull String text, float @NonNull [] vector) {
     }
 
-    /** One trace of a labelling page: its id, creation time and the vector of its highest live task version. */
+    /**
+     * One trace of a labelling page: its id, creation time, the vector of its highest live task version, its current
+     * topic (null when it has none, or the page did not read it) and whether that topic is stale ({@link #READ_PAGE}).
+     */
     @Builder(toBuilder = true)
-    record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector) {
+    record WindowVector(@NonNull UUID traceId, @NonNull Instant traceCreatedAt, float @NonNull [] vector,
+            @Nullable UUID topicId, boolean stale) {
     }
 }
