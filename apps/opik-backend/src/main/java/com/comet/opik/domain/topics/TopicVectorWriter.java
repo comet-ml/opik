@@ -51,11 +51,14 @@ class TopicVectorWriter {
                 : candidates.stream().filter(candidate -> candidate.statusUpdatedAt().isBefore(missedBefore))
                         .map(VectorKey::of)
                         .collect(Collectors.toUnmodifiableSet());
+        // With arrival off, no vector is labelled, so none is kept for it.
+        boolean keepLive = steps.on();
         return embedder.embed(workspace, candidates, budget)
-                .concatMap(outcome -> write(workspace, outcome, missed))
+                .concatMap(outcome -> write(workspace, outcome, missed, keepLive))
                 // The error ends the fold as a value, so the chunks written before it still get labelled.
                 .onErrorResume(error -> Mono.just(Written.failed(error)))
-                .reduce(Written.EMPTY, Written::plus)
+                .collect(WrittenSoFar::new, WrittenSoFar::add)
+                .map(WrittenSoFar::written)
                 .flatMap(written -> {
                     var projectIds = written.live().stream().map(TopicVector::projectId)
                             .collect(Collectors.toUnmodifiableSet());
@@ -70,10 +73,10 @@ class TopicVectorWriter {
     /**
      * Writes the chunk's vectors and the status rows of its traces no later tick would embed. A key is settled once its
      * row is in and {@link #dropDeleted} has checked it; a failed insert or check leaves its keys for a later tick. Only
-     * the vectors of traces the check saw live are kept for arrival.
+     * the vectors of traces the check saw live are kept for arrival, and none when {@code keepLive} is false.
      */
     private Mono<Written> write(TopicVectorsMetrics.Workspace workspace, ChunkOutcome outcome,
-            Set<VectorKey> missed) {
+            Set<VectorKey> missed, boolean keepLive) {
         return Mono.defer(() -> {
             outcome.skipped().forEach((reason, traces) -> metrics.skipped(workspace, reason, traces));
             var skipped = new TickResult(0, outcome.skipped());
@@ -98,8 +101,10 @@ class TopicVectorWriter {
                                     metrics.longWindowMissed(workspace, (int) vectors.stream()
                                             .filter(vector -> missed.contains(VectorKey.of(vector))).count());
                                     var result = skipped.plus(TickResult.written(vectors.size()));
-                                    var liveVectors = vectors.stream()
-                                            .filter(vector -> live.contains(VectorKey.of(vector))).toList();
+                                    var liveVectors = keepLive
+                                            ? vectors.stream().filter(vector -> live.contains(VectorKey.of(vector)))
+                                                    .toList()
+                                            : List.<TopicVector>of();
                                     return Mono.just(Written.builder().result(result).settled(settled)
                                             .live(liveVectors).build());
                                 })
@@ -219,13 +224,30 @@ class TopicVectorWriter {
         static Written failed(@NonNull Throwable error) {
             return EMPTY.toBuilder().error(error).build();
         }
+    }
 
-        Written plus(@NonNull Written other) {
-            var union = new HashSet<>(settled);
-            union.addAll(other.settled);
-            var allLive = new ArrayList<>(live);
-            allLive.addAll(other.live);
-            return new Written(result.plus(other.result), union, allLive, error != null ? error : other.error);
+    /**
+     * The chunks' {@link Written}s added up as they arrive, into one set and one list, instead of a copy of both per
+     * chunk: the counts summed, the keys united, the live vectors in chunk order, the first error kept.
+     */
+    private static final class WrittenSoFar {
+
+        private TickResult result = TickResult.EMPTY;
+        private final Set<VectorKey> settled = new HashSet<>();
+        private final List<TopicVector> live = new ArrayList<>();
+        private Throwable error;
+
+        void add(Written chunk) {
+            result = result.plus(chunk.result());
+            settled.addAll(chunk.settled());
+            live.addAll(chunk.live());
+            if (error == null) {
+                error = chunk.error();
+            }
+        }
+
+        Written written() {
+            return new Written(result, settled, live, error);
         }
     }
 }
