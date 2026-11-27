@@ -1,9 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailModel;
+import com.comet.opik.api.GuardrailModelConfig;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
+import com.comet.opik.infrastructure.db.GuardrailModelConfigColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -26,18 +29,21 @@ import java.util.UUID;
  * reached through a model already checked.
  */
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(GuardrailModelConfigColumnMapper.class)
+@RegisterColumnMapper(GuardrailModelConfigColumnMapper.class)
 @RegisterConstructorMapper(GuardrailModel.class)
 public interface GuardrailModelDAO {
 
     @SqlUpdate("""
-            INSERT INTO guardrail_models(id, workspace_id, name, description, created_by, last_updated_by)
-            VALUES (:id, :workspaceId, :name, :description, :userName, :userName)
+            INSERT INTO guardrail_models(id, workspace_id, name, description, config, created_by, last_updated_by)
+            VALUES (:id, :workspaceId, :name, :description, :config, :userName, :userName)
             """)
     void save(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId, @Bind("name") String name,
-            @Bind("description") String description, @Bind("userName") String userName);
+            @Bind("description") String description, @Bind("config") GuardrailModelConfig config,
+            @Bind("userName") String userName);
 
     @SqlQuery("""
-            SELECT m.id, m.name, m.description,
+            SELECT m.id, m.name, m.description, m.config,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id AND r.status = 'COMPLETED'
                     ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS serving_run_id,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id
@@ -56,12 +62,18 @@ public interface GuardrailModelDAO {
     @SqlQuery("SELECT id FROM guardrail_models WHERE id = :id AND workspace_id = :workspaceId FOR UPDATE")
     Optional<UUID> lock(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    // A null description or config leaves its column as it is, and an empty description is stored as none.
     @SqlUpdate("""
-            UPDATE guardrail_models SET description = :description, last_updated_by = :userName
+            UPDATE guardrail_models
+            SET <if(description)> description = NULLIF(:description, ''), <endif> <if(config)> config = :config, <endif>
+                last_updated_by = :userName
             WHERE id = :id AND workspace_id = :workspaceId
             """)
-    int updateDescription(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
-            @Bind("description") String description, @Bind("userName") String userName);
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    int update(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Define("description") @Bind("description") String description,
+            @Define("config") @Bind("config") GuardrailModelConfig config, @Bind("userName") String userName);
 
     // name is a partial name already escaped with GuardrailPolicyDAO.escapeLike, so its '%' and '_' match only
     // themselves. usable_only keeps the models with a serving run, the ones a rule can name.
@@ -103,7 +115,7 @@ public interface GuardrailModelDAO {
             @Define("sort_fields") String sortFields, @Bind("limit") int limit, @Bind("offset") int offset);
 
     @SqlQuery("""
-            SELECT m.id, m.name, m.description,
+            SELECT m.id, m.name, m.description, m.config,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id AND r.status = 'COMPLETED'
                     ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS serving_run_id,
                 (SELECT r.id FROM guardrail_training_runs r WHERE r.model_id = m.id

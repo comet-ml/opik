@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -24,7 +25,8 @@ import java.util.UUID;
 public record GuardrailModel(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID id,
         @Schema(description = "Unique in the workspace, ignoring case; never changes") @NotNull String name,
-        @Schema(description = "What the model flags: the question its adapter is trained and served on") @NotNull String description,
+        @Schema(description = "A note for people on what the model is for; the classifier never sees it") @Nullable String description,
+        @Schema(description = "What the model's classifier is asked") @NotNull @Valid GuardrailModelConfig config,
         @JsonIgnore UUID servingRunId,
         @JsonIgnore UUID latestRunId,
         @Schema(description = "The run checks with the model are served by, its latest completed one; null until one completes, and a model without one cannot be used in a rule", accessMode = Schema.AccessMode.READ_ONLY) @Nullable GuardrailTrainingRun servingRun,

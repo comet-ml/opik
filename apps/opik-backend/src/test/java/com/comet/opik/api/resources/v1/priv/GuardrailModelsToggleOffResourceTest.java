@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.GuardrailModelConfig;
 import com.comet.opik.api.GuardrailModelUpdate;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -12,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Client;
@@ -136,6 +138,9 @@ class GuardrailModelsToggleOffResourceTest {
     private static Entity<FormDataMultiPart> multipart() {
         var multiPart = new FormDataMultiPart().field("name", randomUUID().toString()).field("description",
                 randomUUID().toString());
+        multiPart.bodyPart(new FormDataBodyPart("config",
+                JsonUtils.writeValueAsString(new GuardrailModelConfig(randomUUID().toString())),
+                MediaType.APPLICATION_JSON_TYPE));
         multiPart.bodyPart(new FormDataBodyPart("file",
                 new ByteArrayInputStream("{\"text\": \"t\", \"label\": \"yes\"}".getBytes(StandardCharsets.UTF_8)),
                 MediaType.APPLICATION_OCTET_STREAM_TYPE));
@@ -153,7 +158,9 @@ class GuardrailModelsToggleOffResourceTest {
                 Arguments.of("get by id",
                         (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test.request(id).get()),
                 Arguments.of("update", (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test
-                        .request(id).method("PATCH", Entity.json(new GuardrailModelUpdate(randomUUID().toString())))),
+                        .request(id).method("PATCH",
+                                Entity.json(
+                                        GuardrailModelUpdate.builder().description(randomUUID().toString()).build()))),
                 Arguments.of("delete",
                         (Function<GuardrailModelsToggleOffResourceTest, Response>) test -> test.request(id)
                                 .delete()),

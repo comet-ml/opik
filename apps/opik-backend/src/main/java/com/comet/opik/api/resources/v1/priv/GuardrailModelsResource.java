@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.GuardrailModel;
 import com.comet.opik.api.GuardrailModel.GuardrailModelPage;
+import com.comet.opik.api.GuardrailModelConfig;
 import com.comet.opik.api.GuardrailModelUpdate;
 import com.comet.opik.api.GuardrailTrainingRun;
 import com.comet.opik.api.GuardrailTrainingRun.GuardrailTrainingRunPage;
@@ -49,6 +50,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 
 import java.io.InputStream;
@@ -87,7 +89,7 @@ public class GuardrailModelsResource {
 
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    @Operation(operationId = "createGuardrailModel", summary = "Create guardrail model", description = "Create a guardrail model and start its first training run from a labelled JSONL file", responses = {
+    @Operation(operationId = "createGuardrailModel", summary = "Create guardrail model", description = "Create a guardrail model from its config and start its first training run from a labelled JSONL file; a rule can use the model once a training run completes", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/guardrails/models/{id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request: the training data's problems, each line's with its number", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -101,14 +103,16 @@ public class GuardrailModelsResource {
             // Dropwizard reports a form field's violation as "The request body ...", without its name, so each message
             // names its field.
             @FormDataParam("name") @NotBlank(message = "name must not be blank") @Size(max = GuardrailModel.NAME_MAX_LENGTH, message = "name cannot exceed {max} characters") String name,
-            @FormDataParam("description") @NotBlank(message = "description must not be blank") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "description cannot exceed {max} characters") String description,
+            @FormDataParam("description") @Size(max = GuardrailModel.DESCRIPTION_MAX_LENGTH, message = "description cannot exceed {max} characters") @Schema(description = "A note for people on what the model is for; the classifier never sees it") String description,
+            @FormDataParam("config") @NotNull(message = "config must not be null") @Valid @Schema(description = "A JSON part, read as JSON whatever its Content-Type: what the model's classifier is asked", implementation = GuardrailModelConfig.class) GuardrailModelConfig config,
             @FormDataParam("file") @NotNull @Schema(description = FILE_DESCRIPTION) InputStream file,
             @Context UriInfo uriInfo) {
         checkAccess();
 
         trainingDataset.validate(file);
         log.info("Creating guardrail model, name '{}', workspaceId '{}'", name, requestContext.get().getWorkspaceId());
-        var id = modelService.create(name, description);
+        // A form sends an empty field for an empty input, which means no description.
+        var id = modelService.create(name, StringUtils.isBlank(description) ? null : description, config);
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
         return Response.created(uri).build();
     }
@@ -146,7 +150,7 @@ public class GuardrailModelsResource {
 
     @PATCH
     @Path("/{id}")
-    @Operation(operationId = "updateGuardrailModel", summary = "Update guardrail model", description = "Update a guardrail model's description; its name never changes", responses = {
+    @Operation(operationId = "updateGuardrailModel", summary = "Update guardrail model", description = "Update a guardrail model's description, its config or both; what is absent stays as it is, a blank description removes it, and the name never changes. A new config applies from the next check, with no retrain", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "403", description = FORBIDDEN, content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Guardrail model not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
@@ -158,7 +162,7 @@ public class GuardrailModelsResource {
         checkAccess();
 
         log.info("Updating guardrail model, id '{}', workspaceId '{}'", id, requestContext.get().getWorkspaceId());
-        modelService.updateDescription(id, update.description());
+        modelService.update(id, update.description(), update.config());
         return Response.noContent().build();
     }
 

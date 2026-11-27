@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.GuardrailModel;
 import com.comet.opik.api.GuardrailModel.GuardrailModelPage;
+import com.comet.opik.api.GuardrailModelConfig;
 import com.comet.opik.api.GuardrailTrainingRun;
 import com.comet.opik.api.GuardrailTrainingRun.GuardrailTrainingRunPage;
 import com.comet.opik.api.GuardrailTrainingRunStatus;
@@ -39,21 +40,22 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 /**
- * The guardrail models a workspace trains, in the request's workspace. Their runs are the
- * {@link GuardrailTrainingService}'s, which every write here calls inside its own transaction.
+ * The guardrail models a workspace trains, in the request's workspace: each asked with the prompt in its config. Their
+ * runs are the {@link GuardrailTrainingService}'s, which every write here calls inside its own transaction.
  */
 @ImplementedBy(GuardrailModelServiceImpl.class)
 public interface GuardrailModelService {
 
     /** A model and its first training run, in one transaction. 409 for a name the workspace has, ignoring case. */
-    UUID create(String name, String description);
+    UUID create(String name, String description, GuardrailModelConfig config);
 
     GuardrailModel get(UUID id);
 
     GuardrailModelPage find(int page, int size, String name, boolean usableOnly,
             GuardrailTrainingRunStatus latestRunStatus, List<SortingField> sortingFields);
 
-    void updateDescription(UUID id, String description);
+    /** Sets what is given; a null description or config is left as it is, and a blank description is removed. */
+    void update(UUID id, String description, GuardrailModelConfig config);
 
     /** The model's runs, newest first. 404 for a model the workspace does not have, rather than an empty page. */
     GuardrailTrainingRunPage findRuns(UUID id, int page, int size);
@@ -81,14 +83,14 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
-    public UUID create(@NonNull String name, @NonNull String description) {
+    public UUID create(@NonNull String name, String description, @NonNull GuardrailModelConfig config) {
         var id = idGenerator.generateId();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
         template.inTransaction(WRITE, handle -> {
             try {
-                handle.attach(GuardrailModelDAO.class).save(id, workspaceId, name, description, userName);
+                handle.attach(GuardrailModelDAO.class).save(id, workspaceId, name, description, config, userName);
             } catch (UnableToExecuteStatementException exception) {
                 if (exception.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(MODEL_ALREADY_EXISTS)));
@@ -142,16 +144,18 @@ class GuardrailModelServiceImpl implements GuardrailModelService {
     }
 
     @Override
-    public void updateDescription(@NonNull UUID id, @NonNull String description) {
+    public void update(@NonNull UUID id, String description, GuardrailModelConfig config) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+        // Blank removes the description, as on create; the DAO stores an empty one as none.
+        String newDescription = description != null && description.isBlank() ? "" : description;
 
         int updated = template.inTransaction(WRITE, handle -> handle.attach(GuardrailModelDAO.class)
-                .updateDescription(id, workspaceId, description, userName));
+                .update(id, workspaceId, newDescription, config, userName));
         if (updated == 0) {
             throw new NotFoundException(MODEL_NOT_FOUND);
         }
-        log.info("Updated guardrail model description, id '{}', workspaceId '{}'", id, workspaceId);
+        log.info("Updated guardrail model, id '{}', workspaceId '{}'", id, workspaceId);
     }
 
     @Override
