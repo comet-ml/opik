@@ -25,7 +25,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -278,27 +277,19 @@ public class TopicsRunPlanner {
      */
     private static Flux<PlannedRun> inTurn(List<TopicProjectKey> labels, TopicsDiscoveryCandidates.Due builds,
             LocalDate night) {
-        var nextLabel = labels.iterator();
-        var buildsLeft = new AtomicBoolean(true);
-        return Flux.<Boolean, Boolean>generate(() -> true, (labelTurn, sink) -> {
-            if (nextLabel.hasNext() || buildsLeft.get()) {
-                sink.next(labelTurn);
-            } else {
-                sink.complete();
-            }
-            return !labelTurn;
-        })
-                .concatMap(labelTurn -> {
-                    if (labelTurn) {
-                        return nextLabel.hasNext() ? Mono.just(labels(nextLabel.next())) : Mono.<PlannedRun>empty();
-                    }
-                    return buildsLeft.get()
-                            ? builds.next().map(build -> PlannedRun.builder().workspaceId(build.workspaceId())
-                                    .projectId(build.projectId()).mode(RunMode.DISCOVERY).night(night)
-                                    .windowTraces(build.vectors()).build())
-                                    .switchIfEmpty(Mono.fromRunnable(() -> buildsLeft.set(false)))
-                            : Mono.<PlannedRun>empty();
-                }, 0);
+        var rest = labels.isEmpty() ? labels : labels.subList(1, labels.size());
+        return Flux.just(true, false).concatMap(labelTurn -> labelTurn
+                ? Flux.fromIterable(labels).take(1).map(TopicsRunPlanner::labels)
+                : builds.next()
+                        .flatMapMany(next -> Flux.just(discovery(next.candidate(), night))
+                                .concatWith(Flux.defer(() -> inTurn(rest, next.rest(), night))))
+                        .switchIfEmpty(Flux.defer(() -> Flux.fromIterable(rest).map(TopicsRunPlanner::labels))),
+                0);
+    }
+
+    private static PlannedRun discovery(TopicsDiscoveryCandidates.Candidate build, LocalDate night) {
+        return PlannedRun.builder().workspaceId(build.workspaceId()).projectId(build.projectId())
+                .mode(RunMode.DISCOVERY).night(night).windowTraces(build.vectors()).build();
     }
 
     private static PlannedRun labels(TopicProjectKey project) {
