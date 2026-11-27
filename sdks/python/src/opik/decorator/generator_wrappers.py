@@ -152,7 +152,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
 class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
         self,
-        generator: Generator[YieldType, None, None],
+        generator: Generator[YieldType, None, object],
         start_span_arguments: arguments_helpers.StartSpanParameters,
         opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
         track_options: arguments_helpers.TrackOptions,
@@ -187,30 +187,34 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             self._handle_generator_exception_before_raising(exception)
             raise
 
-    def close(self) -> None:
+    def close(self) -> object:
         """Close the underlying generator and end the span.
 
         Mirrors `generator.close()`, so `contextlib.closing` and an explicit close
-        both end the span of a generator that was not consumed to the end. A failure
-        during cleanup is recorded on the span rather than lost behind a span that
-        claims to have succeeded.
+        both end the span of a generator that was not consumed to the end. Returns
+        the underlying close result, which can be a value on Python 3.13 and later.
+        A failure during cleanup is recorded on the span rather than lost behind a
+        span that claims to have succeeded.
         """
         try:
+            # Older Python type stubs declare close() as returning only None.
+            close_generator: Callable[[], object] = self._generator.close
             # An ended span must not be pushed: popping it would also pop the
             # caller's span, which sits beneath it on the context.
             if self._created_span_data is None or self._span_finished:
-                self._generator.close()
+                result = close_generator()
             else:
                 # The generator's `finally` runs here, so it must see its own span
                 # as current, as it does in `__next__`.
                 with context_storage.temporary_context(
                     self._created_span_data, self._created_trace_data
                 ):
-                    self._generator.close()
+                    result = close_generator()
         except BaseException as exception:
             self._handle_generator_exception_before_raising(exception)
             raise
         self._finalize_if_unfinished()
+        return result
 
     def _finalize_at_exit(self) -> None:
         self.close()
