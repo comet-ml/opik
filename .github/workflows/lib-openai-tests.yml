@@ -25,7 +25,7 @@ on:
   workflow_call:
     inputs:
       run_expensive_tests:
-        description: "Run expensive tests (e.g., video generation)"
+        description: "Run expensive tests (e.g., text-to-speech)"
         required: false
         type: boolean
         default: false
@@ -79,7 +79,7 @@ jobs:
 
       - name: Run tests
         env:
-          # Video/TTS output does not depend on the Python version, so the
+          # TTS output does not depend on the Python version, so the
           # expensive tests run on one matrix entry only.
           OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests && matrix.python_version == '3.14' }}
         run: |

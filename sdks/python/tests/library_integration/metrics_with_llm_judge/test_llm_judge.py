@@ -45,10 +45,13 @@ def assert_llm_judge_score_result(result, expected_name: str) -> None:
 
 class TestLLMJudgeScore:
     @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
-    def test_score__single_assertion__returns_result(self, llm_model):
-        assertion = "Response is factually accurate"
+    def test_score__passing_and_failing_assertions__returns_verdict_per_assertion(
+        self, llm_model
+    ):
+        passing_assertion = "Response is factually accurate"
+        failing_assertion = "Response names London as the capital of France"
         evaluator = LLMJudge(
-            assertions=[assertion],
+            assertions=[passing_assertion, failing_assertion],
             model=llm_model,
             track=False,
             reasoning_effort="minimal",
@@ -59,28 +62,16 @@ class TestLLMJudgeScore:
             output="The capital of France is Paris.",
         )
 
-        assert len(results) == 1
-        assert_llm_judge_score_result(results[0], expected_name=assertion)
-        assert results[0].value is True
-
-    @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
-    def test_score__failing_assertion__returns_false(self, llm_model):
-        assertion = "Response is factually accurate"
-        evaluator = LLMJudge(
-            assertions=[assertion],
-            model=llm_model,
-            track=False,
-            reasoning_effort="minimal",
+        assert len(results) == 2
+        results_by_name = {result.name: result for result in results}
+        assert_llm_judge_score_result(
+            results_by_name[passing_assertion], expected_name=passing_assertion
         )
-
-        results = evaluator.score(
-            input="What is the capital of France?",
-            output="The capital of France is London.",
+        assert results_by_name[passing_assertion].value is True
+        assert_llm_judge_score_result(
+            results_by_name[failing_assertion], expected_name=failing_assertion
         )
-
-        assert len(results) == 1
-        assert results[0].value is False
-        assert_llm_judge_score_result(results[0], expected_name=assertion)
+        assert results_by_name[failing_assertion].value is False
 
     @pytest.mark.parametrize("llm_model", MODEL_PARAMS, indirect=True)
     def test_score__many_assertions__returns_all_results(self, llm_model):

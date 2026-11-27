@@ -27,7 +27,6 @@ readability and avoids false-coupling with real model identifiers.
 # on the sunset path. When OpenAI bumps the "nano" tier again we only update
 # the value here.
 OPENAI_GPT_NANO = "gpt-5-nano"
-OPENAI_SORA = "sora-2"
 OPENAI_DECISIONS = "gpt-6-luna"
 
 # gpt-4o-mini kept only for CrewAI v0 — v0's hard pin on litellm==1.74.9

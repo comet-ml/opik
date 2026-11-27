@@ -2,8 +2,6 @@ from ... import llm_constants
 from ...testlib import ANY_BUT_NONE
 
 MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_NANO
-VIDEO_MODEL_FOR_TESTS = llm_constants.OPENAI_SORA
-VIDEO_SIZE_FOR_TESTS = "720x1280"  # Lowest resolution for faster/cheaper tests
 DECISIONS_MODEL_FOR_TESTS = llm_constants.OPENAI_DECISIONS
 DECISIONS_INPUT_FOR_TESTS = (
     "Customer: I was charged twice for my subscription this month. Please fix it!"

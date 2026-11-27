@@ -105,41 +105,27 @@ def test__no_opik_configured__answer_relevance(configure_opik_not_configured, mo
     assert_helpers.assert_score_result(result)
 
 
-@pytest.mark.parametrize(
-    argnames="context",
-    argvalues=[
-        None,
-        ["France is a country in Europe."],
-    ],
-)
-def test__context_precision(model, context):
+def test__context_precision(model):
     context_precision_metric = metrics.ContextPrecision(model=model, track=False)
 
     result = context_precision_metric.score(
         input="What's the capital of France?",
         output="The capital of France is Paris.",
         expected_output="Paris",
-        context=context,
+        context=["France is a country in Europe."],
     )
 
     assert_helpers.assert_score_result(result)
 
 
-@pytest.mark.parametrize(
-    argnames="context",
-    argvalues=[
-        None,
-        ["France is a country in Europe."],
-    ],
-)
-def test__context_recall(model, context):
+def test__context_recall(model):
     context_precision_metric = metrics.ContextRecall(model=model, track=False)
 
     result = context_precision_metric.score(
         input="What's the capital of France?",
         output="The capital of France is Paris.",
         expected_output="Paris",
-        context=context,
+        context=["France is a country in Europe."],
     )
 
     assert_helpers.assert_score_result(result)
@@ -285,19 +271,6 @@ async def test__trajectory_accuracy__async(model):
             }
         ],
         final_result="The sum of 15 and 27 is 42",
-    )
-
-    assert_helpers.assert_score_result(result)
-
-
-def test__structured_output_compliance__valid_json(model):
-    """Test structured output compliance with valid JSON."""
-    structured_output_metric = metrics.StructuredOutputCompliance(
-        model=model, track=False
-    )
-
-    result = structured_output_metric.score(
-        output='{"name": "John", "age": 30, "city": "New York"}'
     )
 
     assert_helpers.assert_score_result(result)

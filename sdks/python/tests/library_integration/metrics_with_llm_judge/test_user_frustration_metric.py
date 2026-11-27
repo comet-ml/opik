@@ -19,15 +19,7 @@ def real_model_conversation():
         },
         {
             "role": "user",
-            "content": "But this doesn’t even center anything! This is incomplete.",
-        },
-        {
-            "role": "assistant",
-            "content": "You're right. You also need `justify-content` and `align-items`.",
-        },
-        {
-            "role": "user",
-            "content": "Why didn’t you include those in the first place? This is wasting my time.",
+            "content": "But this doesn’t even center anything! This is wasting my time.",
         },
     ]
 
