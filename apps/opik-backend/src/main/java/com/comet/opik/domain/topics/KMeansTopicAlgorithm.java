@@ -113,7 +113,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             var table = PrototypeAssigner.cosines(window.vectors(), fit.centres(), k, TopicEmbedding.DIMENSIONS);
             var sums = GroupVectorSums.of(window.vectors(), table, fit.centres(), k, TopicEmbedding.DIMENSIONS,
                     config.getAssignMinCosine(), config.getOtherGate());
-            if (2L * sums.sums() <= window.size()) {
+            if (2L * sums.sumCount() <= window.size()) {
                 traces = AssignmentInput.table(table, k, sums);
             }
         }
@@ -166,6 +166,23 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
         private static int[] columns(List<Integer> groups) {
             return groups.stream().mapToInt(Integer::intValue).toArray();
         }
+    }
+
+    /** Up to {@code max} examples, one from each group in turn, so every former topic shows in the prompt. */
+    static List<String> mergeExamples(List<List<String>> byGroup, int max) {
+        var out = new ArrayList<String>();
+        for (int at = 0; out.size() < max; at++) {
+            int before = out.size();
+            for (var group : byGroup) {
+                if (at < group.size() && out.size() < max) {
+                    out.add(group.get(at));
+                }
+            }
+            if (out.size() == before) {
+                break;
+            }
+        }
+        return out;
     }
 
     /** The groups of one window, waiting for the author answer. */
@@ -247,23 +264,6 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                     groupsOf.stream().mapToDouble(group -> byGroup.get(group).share()).sum(),
                     mergeExamples(groupsOf.stream().map(examples::get).toList(),
                             config.getNightlyTopicExamples()));
-        }
-
-        /** Up to {@code max} examples, one from each group in turn, so every former topic shows in the prompt. */
-        private static List<String> mergeExamples(List<List<String>> byGroup, int max) {
-            var out = new ArrayList<String>();
-            for (int at = 0; out.size() < max; at++) {
-                int before = out.size();
-                for (var group : byGroup) {
-                    if (at < group.size() && out.size() < max) {
-                        out.add(group.get(at));
-                    }
-                }
-                if (out.size() == before) {
-                    break;
-                }
-            }
-            return out;
         }
 
         /** @param topicGroups per topic, the groups whose centres are its prototypes, in prototype order */

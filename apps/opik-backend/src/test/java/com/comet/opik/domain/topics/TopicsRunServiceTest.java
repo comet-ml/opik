@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.inference.InferenceClient;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.tomakehurst.wiremock.matching.StringValuePattern;
 import com.redis.testcontainers.RedisContainer;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
@@ -87,6 +88,8 @@ class TopicsRunServiceTest {
     private static final TopicAlgorithm FIXTURE_ALGORITHM = TopicsTestAlgorithm.algorithm(
             TopicsTestAlgorithm.fixedGroups(15));
     private static final LocalDate NIGHT = LocalDate.ofInstant(FIXTURE.night, ZoneOffset.UTC);
+    /** A rename call's request body: its request id ends with the merge tag. */
+    private static final StringValuePattern RENAME_CALL = matching("(?s).*:" + TopicTasks.MERGE + "\".*");
     private static final String MERGED_NAME = "Everything Asked";
     private static final String MERGED_DEFINITION = "Every request of the window.";
 
@@ -439,7 +442,7 @@ class TopicsRunServiceTest {
     void failedRenameKeepsTheName() {
         stubAnswer(FIXTURE.discoveryAnswer);
         wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
-                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))
+                .withRequestBody(RENAME_CALL)
                 .willReturn(aResponse().withStatus(500).withHeader("Content-Type", "application/json")
                         .withBody("{\"error\":{\"code\":\"internal\",\"message\":\"down\",\"retryable\":false}}")));
         var runId = start();
@@ -474,13 +477,13 @@ class TopicsRunServiceTest {
 
     private void stubRename(JsonNode output) {
         wireMock.server().stubFor(post(urlEqualTo(GENERATE_PATH)).atPriority(1)
-                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))
+                .withRequestBody(RENAME_CALL)
                 .willReturn(answer(output, 0)));
     }
 
     private int renameCalls() {
         return wireMock.server().findAll(postRequestedFor(urlEqualTo(GENERATE_PATH))
-                .withRequestBody(matching("(?s).*:" + TopicTasks.MERGE + "\".*"))).size();
+                .withRequestBody(RENAME_CALL)).size();
     }
 
     /** A rename answer for the one merged topic. */

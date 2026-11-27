@@ -55,6 +55,17 @@ class KMeansTopicAlgorithmTest {
     }
 
     @Test
+    @DisplayName("a merged topic's rename examples take one from each former group in turn, up to the cap")
+    void mergeExamples() {
+        var byGroup = List.of(List.of("a1", "a2", "a3"), List.of("b1"), List.<String>of());
+
+        assertThat(KMeansTopicAlgorithm.mergeExamples(byGroup, 4)).containsExactly("a1", "b1", "a2", "a3");
+        assertThat(KMeansTopicAlgorithm.mergeExamples(byGroup, 2)).containsExactly("a1", "b1");
+        assertThat(KMeansTopicAlgorithm.mergeExamples(byGroup, 10)).containsExactly("a1", "b1", "a2", "a3");
+        assertThat(KMeansTopicAlgorithm.mergeExamples(List.of(List.of(), List.of()), 4)).isEmpty();
+    }
+
+    @Test
     @DisplayName("a verify budget above the inference service's max_tokens limit stops the start")
     void verifyBudgetAboveTheLimit() {
         // The verify task's 60 + 25 per pair x 200 groups is 5060, above the 4096 the service takes.

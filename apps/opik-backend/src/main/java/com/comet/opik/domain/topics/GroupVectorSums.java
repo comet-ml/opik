@@ -136,7 +136,7 @@ final class GroupVectorSums {
     }
 
     /** How many sums it holds: one per group with a trace summed, and one per ranking. */
-    long sums() {
+    long sumCount() {
         return Arrays.stream(byGroup).filter(Objects::nonNull).count() + byRanking.size();
     }
 

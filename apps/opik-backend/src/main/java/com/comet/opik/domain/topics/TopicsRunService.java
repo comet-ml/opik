@@ -11,6 +11,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -273,8 +274,10 @@ public class TopicsRunService {
     private Mono<TopicsLlm.Answer<JsonNode>> answer(TopicRun run, NightStep.Ask<?> ask) {
         var call = timed(run, "llm", llm.generate(run, ask.request(), NightJson::object));
         return !ask.optional() ? call : call.onErrorResume(error -> {
-            log.warn("Topics run '{}' optional LLM call failed, going on without its answer, project '{}', tag '{}'",
-                    run.runId(), run.projectId(), ask.request().tag(), error);
+            // The error types, not the exception: its causes can quote the answer.
+            log.warn("Topics run '{}' optional LLM call failed, going on without its answer, project '{}', tag '{}', "
+                    + "errors '{}'", run.runId(), run.projectId(), ask.request().tag(),
+                    ExceptionUtils.getThrowableList(error).stream().map(TopicsErrors::formatError).toList());
             return Mono.just(new TopicsLlm.Answer<>(null, JsonUtils.createObjectNode()));
         });
     }
