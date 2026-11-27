@@ -183,12 +183,17 @@ class TopicsAlgorithmRulesTest {
     class Prompt {
 
         @Test
-        @DisplayName("startup fails when the author answer of maxTopics topics and maxGroups groups can pass the "
-                + "author task's max_tokens")
+        @DisplayName("startup takes an author answer estimate equal to the author task's max_tokens and fails one "
+                + "group above it")
         void authorAnswerBudget() {
             var config = TopicsTestAlgorithm.config();
-            config.setMaxGroups(200);
+            int fits = (new TopicTasks().author().effectiveMaxTokens()
+                    - config.getMaxTopics() * KMeansTopicAlgorithm.AUTHOR_TOKENS_PER_TOPIC)
+                    / KMeansTopicAlgorithm.AUTHOR_TOKENS_PER_GROUP;
+            config.setMaxGroups(fits);
+            TopicsTestAlgorithm.algorithm(config);
 
+            config.setMaxGroups(fits + 1);
             assertThatThrownBy(() -> TopicsTestAlgorithm.algorithm(config)).isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("author answer");
         }
