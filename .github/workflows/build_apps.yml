@@ -9,6 +9,21 @@ on:
       - "deployment/**"
       - 'sdks/**'
 
+  # The same build, without pushing, for a PR that changes an input resolved per arch: a base image
+  # digest, or a dependency's wheel or native binary. Source changes stay on the amd64 PR builds.
+  pull_request:
+    paths:
+      - "apps/opik-backend/Dockerfile"
+      - "apps/opik-frontend/Dockerfile"
+      - "apps/opik-frontend/package.json"
+      - "apps/opik-frontend/package-lock.json"
+      - "apps/opik-python-backend/Dockerfile"
+      - "apps/opik-python-backend/requirements.txt"
+      - "apps/opik-sandbox-executor-python/Dockerfile"
+      - "apps/opik-sandbox-executor-python/requirements.txt"
+      - ".github/workflows/build_apps.yml"
+      - ".github/workflows/build_and_push_docker.yaml"
+
   workflow_dispatch:
     inputs:
       is_release:
@@ -88,6 +103,8 @@ jobs:
     outputs:
         version: ${{ steps.version.outputs.version }}
         build_from: ${{ steps.version.outputs.build_from }}
+        publish: ${{ steps.version.outputs.publish }}
+        build_arm64: ${{ steps.version.outputs.build_arm64 }}
     steps:
         - name: Checkout
           uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -101,7 +118,27 @@ jobs:
             INPUT_REF: ${{ inputs.ref }}
             REF_NAME: ${{ github.ref_name }}
             RUN_NUMBER: ${{ github.run_number }}
+            EVENT_NAME: ${{ github.event_name }}
+            WORKFLOW_REF: ${{ github.workflow_ref }}
+            INPUT_BUILD_ARM64: ${{ inputs.build_arm64 }}
           run: |
+            # A PR run of this workflow only checks that the images build. A call from another
+            # PR-triggered workflow (trigger_test_env_on_label.yaml) still publishes: in a called
+            # workflow, github.workflow_ref names the caller.
+            if [[ "${EVENT_NAME}" == "pull_request" && "${WORKFLOW_REF}" == */.github/workflows/build_apps.yml@* ]]; then
+              PUBLISH=false
+            else
+              PUBLISH=true
+            fi
+            echo "publish=${PUBLISH}" | tee -a "$GITHUB_OUTPUT"
+
+            # push and PR runs have no inputs context; both build multi-arch.
+            if [[ "${EVENT_NAME}" == "push" || "${PUBLISH}" == "false" || "${INPUT_BUILD_ARM64}" == "true" ]]; then
+              echo "build_arm64=true" | tee -a "$GITHUB_OUTPUT"
+            else
+              echo "build_arm64=false" | tee -a "$GITHUB_OUTPUT"
+            fi
+
             if [[ "${INPUT_VERSION}" != "" ]]; then
               VERSION="${INPUT_VERSION}"
             else
@@ -130,6 +167,9 @@ jobs:
 
             if [ "${INPUT_REF}" != "" ]; then
               echo "build_from=${INPUT_REF}" | tee -a "$GITHUB_OUTPUT"
+            elif [[ "${PUBLISH}" == "false" ]]; then
+              # A PR's ref_name (<number>/merge) is not a ref checkout can resolve.
+              echo "build_from=${GITHUB_SHA}" | tee -a "$GITHUB_OUTPUT"
             elif [[ "${INPUT_VERSION}" == "" ]]; then
               echo "build_from=${REF_NAME}" | tee -a "$GITHUB_OUTPUT"
             else
@@ -152,8 +192,8 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      # push events have no `inputs` context, so force multi-arch there; otherwise honor the input (workflow_dispatch / workflow_call use the declared default: true)
-      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      build_arm64: ${{ needs.set-version.outputs.build_arm64 == 'true' }}
+      push: ${{ needs.set-version.outputs.publish == 'true' }}
 
   build-sandbox-executor-python:
     permissions:
@@ -172,7 +212,8 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      build_arm64: ${{ needs.set-version.outputs.build_arm64 == 'true' }}
+      push: ${{ needs.set-version.outputs.publish == 'true' }}
 
   build-python-backend:
     permissions:
@@ -192,7 +233,8 @@ jobs:
       comet_build_args: ""
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      build_arm64: ${{ needs.set-version.outputs.build_arm64 == 'true' }}
+      push: ${{ needs.set-version.outputs.publish == 'true' }}
 
   # build-guardrails-backend:
   #   if: inputs.build_guardrails != false 
@@ -220,17 +262,20 @@ jobs:
       image: "opik-frontend"
       version: ${{needs.set-version.outputs.version}}
       build_from: ${{needs.set-version.outputs.build_from}}
-      build_comet_image: ${{ !inputs.is_adhoc }}
+      # A PR run skips the comet variant: it compiles a private plugin that fork PRs cannot check out.
+      build_comet_image: ${{ !inputs.is_adhoc && needs.set-version.outputs.publish == 'true' }}
       comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      build_arm64: ${{ needs.set-version.outputs.build_arm64 == 'true' }}
+      push: ${{ needs.set-version.outputs.publish == 'true' }}
       ai_spend_plugin_ref: ${{ inputs.ai_spend_plugin_ref || 'main' }}
 
   create-git-tag:
     if: |
       always() &&
       !inputs.is_release &&
+      needs.set-version.outputs.publish == 'true' &&
       needs.set-version.result == 'success' &&
       needs.build-backend.result == 'success' &&
       needs.build-frontend.result == 'success' &&
