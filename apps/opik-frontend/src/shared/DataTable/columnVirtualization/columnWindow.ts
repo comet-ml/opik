@@ -33,6 +33,31 @@ const createSpacer = (id: string, size: number): ColumnSpacer => ({
   isColumnSpacer: true,
 });
 
+// With table-layout: fixed and width: 100%, the browser spreads any spare
+// width over every px-sized column, so the checkbox/pin/actions columns grew
+// with the page. Percentages on the data columns make them take all the spare
+// width while fixed columns keep their exact px size. When the table overflows
+// (min-width wins) the percentages resolve to the px sizes. Spacers stand in
+// for the columns a window does not render, so only rendered data columns
+// share the percentages. Tables without fixed columns keep px.
+export const getColumnWidths = <T extends { id: string; size: number }>(
+  cols: T[],
+  window: ColumnWindow,
+  fixedIds: Set<string>,
+): Record<string, string> => {
+  const rendered = sliceColumnWindow(cols, window);
+  const hasFixedColumns = cols.some((c) => fixedIds.has(c.id));
+  const isPx = (c: T | ColumnSpacer) =>
+    !hasFixedColumns || isColumnSpacer(c) || fixedIds.has(c.id);
+  const dataSize = rendered.reduce((acc, c) => acc + (isPx(c) ? 0 : c.size), 0);
+
+  return rendered.reduce<Record<string, string>>((acc, c) => {
+    acc[c.id] =
+      isPx(c) || !dataSize ? `${c.size}px` : `${(c.size / dataSize) * 100}%`;
+    return acc;
+  }, {});
+};
+
 export type WindowedHeader<THeader> = {
   header: THeader;
   colSpan: number;
