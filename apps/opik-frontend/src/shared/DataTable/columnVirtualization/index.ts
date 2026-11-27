@@ -4,6 +4,7 @@ export {
   sliceColumnWindow,
   sliceColumnWindowHeaders,
   isColumnSpacer,
+  getColumnWidths,
 } from "@/shared/DataTable/columnVirtualization/columnWindow";
 export type {
   ColumnWindow,

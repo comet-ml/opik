@@ -197,7 +197,7 @@ class TopicsRunsIntegrationTest {
         data.seed(workspaceId, small, 0, SMALL, tomorrowStart());
         data.seed(aiLabelsOnlyWorkspace(), notOptedIn, 0, FIXTURE.size(), tomorrowStart());
         data.savedList(workspaceId, withList, tomorrowStart(), FIXTURE.size());
-        store.markLabelsComplete(workspaceId, withList, data.topicProject(withList).listRunId()).block();
+        store.markLabelsComplete(workspaceId, withList, data.topicProject(withList).listRunId(), "test").block();
         deleteProject(workspaceId, deleted);
 
         assertThat(planner.plan(Instant.now()).block()).isEqualTo(1);
@@ -209,9 +209,11 @@ class TopicsRunsIntegrationTest {
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertProject(built, TopicProject.builder()
                 .workspaceId(workspaceId).projectId(built).savedRuns(1).listRunId(buildRun).labelsComplete(true)
                 .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
+                .labelsFingerprint(algorithm.labellerFingerprint(data.topics(built),
+                        data.topicProject(built).otherVectors()))
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
-        data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, built, buildRun, tomorrowStart());
+        data.assertArrivalEqualsTheLabels(windowDAO, algorithm, workspaceId, built, tomorrowStart());
         for (var skipped : List.of(small, quiet, notOptedIn, deleted)) {
             assertNoRun(skipped);
         }
@@ -491,14 +493,15 @@ class TopicsRunsIntegrationTest {
 
     @Test
     @DisplayName("a queued nightly update of a saved list runs on a pod: it saves the list under its own run with the "
-            + "topics' ids, writes one trace_topics row per trace as its run's, and its labelling pass runs after it")
+            + "topics' ids, and its labelling pass runs after it: a trace keeps the build's row or gets one of the "
+            + "update")
     void runsANightlyUpdate(@Jit TopicsRunPublisher publisher) {
         var workspaceId = enabledWorkspace();
         var projectId = UUID.randomUUID();
         data.seed(workspaceId, projectId, 0, FIXTURE.size(), tomorrowStart());
         // A list of the night before the update's: a pod skips an update whose night the list already covers.
         planner.runByHand(workspaceId, projectId, tomorrow().minusDays(1), false).block();
-        awaitBuilt(projectId);
+        var buildRun = awaitBuilt(projectId);
         awaitLabelsComplete(projectId);
         var before = data.topics(projectId);
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
@@ -514,7 +517,7 @@ class TopicsRunsIntegrationTest {
         assertThat(data.topics(projectId)).isNotEmpty().extracting(Topic::id)
                 .isSubsetOf(before.stream().map(Topic::id).toList());
         assertThat(data.traceTopics(workspaceId, projectId)).hasSize(FIXTURE.size())
-                .allSatisfy(row -> assertThat(row.runId()).isEqualTo(updateRunId));
+                .allSatisfy(row -> assertThat(row.runId()).isIn(buildRun, updateRunId));
     }
 
     @Test
@@ -528,7 +531,7 @@ class TopicsRunsIntegrationTest {
         // A list of the night before the update's: a pod skips an update whose night the list already covers.
         data.savedList(workspaceId, projectId, tomorrowStart().minus(Duration.ofDays(1)), FIXTURE.size());
         var listRows = insertListRows(workspaceId, projectId);
-        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId()).block();
+        store.markLabelsComplete(workspaceId, projectId, data.topicProject(projectId).listRunId(), "test").block();
         wireMock.stubFor(post(urlEqualTo(GENERATE_PATH)).willReturn(TopicsTestData.answer(emptyNaming(), 0)));
 
         var updateRunId = queueUpdate(publisher, workspaceId, projectId);

@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import AddEditCloneDashboardDialog from "@/v2/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
@@ -65,13 +66,15 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   }
 
   return (
-    <div
-      className="flex items-center justify-end gap-2"
-      onClick={(e) => e.stopPropagation()}
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="justify-end p-0"
+      stopClickPropagation
     >
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" className="-mr-2.5">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
@@ -123,6 +126,6 @@ export const DashboardRowActionsCell: React.FunctionComponent<
         confirmText="Delete dashboard"
         confirmButtonVariant="destructive"
       />
-    </div>
+    </CellWrapper>
   );
 };

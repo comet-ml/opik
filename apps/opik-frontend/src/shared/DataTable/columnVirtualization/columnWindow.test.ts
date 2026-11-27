@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  getColumnWidths,
   sliceColumnWindow,
   sliceColumnWindowHeaders,
   isColumnSpacer,
@@ -263,5 +264,52 @@ describe("sliceColumnWindowHeaders", () => {
       { id: "__column_spacer_trail", size: 50, isColumnSpacer: true },
       { header: leaves[7], colSpan: 1 },
     ]);
+  });
+});
+
+describe("getColumnWidths", () => {
+  const FIXED = new Set(["select"]);
+  const cols = [
+    { id: "select", size: 40 },
+    { id: "a", size: 100 },
+    { id: "b", size: 100 },
+    { id: "c", size: 200 },
+    { id: "d", size: 100 },
+  ];
+
+  it("keeps fixed columns in px and shares the rest by percentage", () => {
+    expect(getColumnWidths(cols, INACTIVE_COLUMN_WINDOW, FIXED)).toEqual({
+      select: "40px",
+      a: "20%",
+      b: "20%",
+      c: "40%",
+      d: "20%",
+    });
+  });
+
+  it("keeps px when the table has no fixed columns", () => {
+    expect(
+      getColumnWidths(cols.slice(1), INACTIVE_COLUMN_WINDOW, FIXED),
+    ).toEqual({ a: "100px", b: "100px", c: "200px", d: "100px" });
+  });
+
+  it("shares percentages only among the columns a window renders", () => {
+    const window: ColumnWindow = {
+      active: true,
+      leftCount: 1,
+      centerCount: 4,
+      start: 1,
+      end: 2,
+      leadingWidth: 100,
+      trailingWidth: 100,
+    };
+
+    expect(getColumnWidths(cols, window, FIXED)).toEqual({
+      select: "40px",
+      __column_spacer_lead: "100px",
+      b: "33.33333333333333%",
+      c: "66.66666666666666%",
+      __column_spacer_trail: "100px",
+    });
   });
 });

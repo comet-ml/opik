@@ -1130,7 +1130,7 @@ topics:
     windowDays: 30
     maxVectors: 100000
     llmDeadline: 120s
-    namingDeadline: 30s
+    namingDeadline: 120s
     verifyDeadline: 60s
     readTimeout: 120s
     countTimeout: 60s
@@ -1201,8 +1201,8 @@ topics:
     recentDays: 7
     retireShare: 0.005
     retireNights: 3
-    nightlyMinTightness: 0.80
-    nightlyBigShare: 0.02
+    nightlyMinTightness: 0.77
+    nightlyBigShare: 0.01
     nightlySameMemory: 0.95
     nightlyVerifyTokensPerPair: 25
     nightlyTopicExamples: 4
@@ -1213,7 +1213,7 @@ topics:
     maxMemoryUsage: 1073741824
     maxThreads: 2
     priority: 0
-    maxBlockSize: 8192
+    maxBlockSize: 1024
     budget: 10s
   # Small, so the tests delete over more than one batch.
   storage:

@@ -27,7 +27,10 @@ import {
   isColumnSortable,
   mapColumnDataFields,
 } from "@/lib/table";
-import { generateSelectColumDef } from "@/shared/DataTable/utils";
+import {
+  generateSelectColumDef,
+  PAGE_BODY_SELECT_COLUMN_SIZE,
+} from "@/shared/DataTable/utils";
 import CommitsActionsPanel from "@/v2/pages/PromptPage/CommitsTab/CommitsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -245,7 +248,10 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     const sortableColumns = data?.sortable_by || [];
 
     return [
-      generateSelectColumDef<PromptVersion>(),
+      generateSelectColumDef<PromptVersion>(
+        undefined,
+        PAGE_BODY_SELECT_COLUMN_SIZE,
+      ),
       mapColumnDataFields<PromptVersion, PromptVersion>({
         id: "commit",
         label: "Prompt commit",

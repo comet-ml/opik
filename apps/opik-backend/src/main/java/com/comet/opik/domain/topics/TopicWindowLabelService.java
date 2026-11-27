@@ -18,16 +18,26 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The labelling pass: gives every trace of a saved run's window its {@code trace_topics} row. A run finds its topics on
- * a sample of the window when the window is larger than {@code topics.run.maxVectors}, and its own insert labels
- * only the sample; this pass labels the rest, by the same rule: the {@link TopicAlgorithm#labeller} of the saved
- * prototypes. A list with no topic labels every trace Other, as its run did. The rows carry
- * {@code source = 'run'} and the run's id, as the run's own rows do: they are the run's labels.
+ * The labelling pass: makes the latest {@code trace_topics} row of every trace of a saved run's window the topic the
+ * saved list labels it with, by the {@link TopicAlgorithm#labeller} of its prototypes, the rule the run's own labels
+ * follow. A list with no topic labels every trace Other, as its run did. It writes a row only where a trace's topic
+ * changes or is stale (none yet, or one written before the trace's vector), with {@code source = 'run'} and the run's
+ * id: a trace whose topic is already right keeps its row. A row is stamped with its page's read time, so a vector
+ * written between the read and the insert leaves its trace stale.
  *
- * <p>Resumable: what is left is read from ClickHouse each time, as the window's traces without a row of the run. A pass
- * cut by its deadline or its subscriber, or stopped by a failed read or insert, loses nothing: the list stays saved,
- * the rows written stay, and a later pass goes on from there. No cursor is kept: the project's {@code labels_complete}
- * is false from the save until a pass ends complete, and the discovery job calls the pass again while it is false.
+ * <p>Two sweeps of the window, slice by slice. The relabel sweep reads every trace with its vector and its current
+ * topic, and writes the ones whose topic changes. The stale sweep reads only stale traces, picked before their vectors
+ * are read: the ones vectored without a topic on arrival (arrival off, failed or over budget, or the project had no
+ * list then), re-vectored since their topic, or vectored behind the relabel sweep's cursor. A pass makes the relabel
+ * sweep only when the saved list's {@link TopicAlgorithm#labellerFingerprint} is not the one the labels were last
+ * completed with ({@code labels_fingerprint}): a list whose labeller did not change since a complete pass labels every
+ * trace as before, and since then every topic written with an equal labeller (arrival labels the stored vector, as this
+ * pass reads it) or is stale. The stale sweep always runs, last.
+ *
+ * <p>Resumable: a pass cut by its deadline or its subscriber, or stopped by a failed read or insert, loses nothing:
+ * the list stays saved, the rows written stay, {@code labels_complete} stays false, and the discovery job calls the
+ * pass again. That pass reads the window again but writes only what is still to change. A save keeps the fingerprint
+ * only when the labels were complete, so a pass never skips the relabel sweep after one that was cut.
  *
  * <p>Bounded: the window is cut at every {@code topics.run.labelSliceTraces}-th trace creation time, so each
  * slice holds that many traces however the traffic is spread, and a page's read costs about one slice. A slice is read
@@ -36,9 +46,8 @@ import java.util.UUID;
  * pass ends at the caller's deadline. A page's prototype assignment, the pass's CPU step, runs on {@code parallel()},
  * off the ClickHouse driver's thread that emitted the page.
  *
- * <p>A trace whose vector lands behind the cursor while the pass runs is not on any later page. So before a pass marks
- * the labels complete, it reads the whole window once more for a trace left: if there is one, the pass ends cut, and
- * the next pass labels it.
+ * <p>A pass starts no sooner than {@code topics.arrival.timeout} after its list's save: an arrival step that read the
+ * list before the save has ended by then, so no topic of the older list lands behind the pass's pages.
  *
  * <p>The run's saved sizes ({@code topics.size}) and its logged Other share stay the sample's: they are written before
  * this pass, and the sample is an even one, so its shares are the window's.
@@ -56,20 +65,31 @@ public class TopicWindowLabelService {
 
     /**
      * The saved list a pass labels with: the traces created in {@code [from, to)}. {@code from} is the run's window
-     * start; {@code to} is its window end or its save, whichever is later.
+     * start; {@code to} is its window end or its save, whichever is later. {@code relabel} when its labeller's
+     * {@code fingerprint} is not the one the labels were last completed with.
      */
-    private record Saved(UUID runId, Instant from, Instant to, TopicLabeller labeller) {
+    private record Saved(UUID runId, Instant from, Instant to, Instant savedAt, TopicLabeller labeller,
+            String fingerprint, boolean relabel) {
+    }
+
+    /** One sweep of the window: every trace with its current topic, or only the stale ones. */
+    private enum Sweep {
+        RELABEL,
+        STALE
     }
 
     /** One slice of the window, {@code [from, to)}. */
     record Slice(Instant from, Instant to) {
     }
 
-    /** One page a slice read: {@code number} counts from 1, {@code after} is the trace id it read past. */
-    private record Page(Slice slice, int number, String after, List<TopicWindowDAO.WindowVector> rows) {
+    /**
+     * One page a slice read: {@code number} counts from 1, {@code after} is the trace id it read past. Its rows are in
+     * no order: {@link #last} is their highest trace id.
+     */
+    private record Page(Sweep sweep, Slice slice, int number, String after, List<TopicWindowDAO.WindowVector> rows) {
 
         String last() {
-            return rows.getLast().traceId().toString();
+            return rows.stream().map(row -> row.traceId().toString()).max(String::compareTo).orElse(after);
         }
 
         boolean advanced() {
@@ -87,25 +107,27 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * What a pass did, folded over its stream. {@code windowTraces} is the window's count, once read. {@code skipped}
-     * are the traces whose vector is not {@link TopicEmbedding#usable}, as the run leaves them out of its window: they
-     * get no row, and every later pass reads and skips them again. {@code failed} when a page check, a read or an
-     * insert stopped it; {@code complete} when the stream reached its end.
+     * What a pass did, folded over its stream. {@code windowTraces} is the window's count, once read. {@code read} are
+     * the traces its pages read, {@code written} the rows it inserted, {@code other} those of them Other.
+     * {@code skipped} are the traces whose vector is not {@link TopicEmbedding#usable}, as the run leaves them out of
+     * its window: they get no row, and every later relabel sweep reads and skips them again. {@code failed} when a page
+     * check, a read or an insert stopped it; {@code complete} when the stream reached its end.
      */
-    private record Totals(Long windowTraces, long labelled, long other, long skipped, boolean failed,
+    private record Totals(Long windowTraces, long read, long written, long other, long skipped, boolean failed,
             boolean complete) {
 
-        static final Totals ZERO = new Totals(null, 0, 0, 0, false, false);
-        static final Totals END = new Totals(null, 0, 0, 0, false, true);
-        static final Totals FAILED = new Totals(null, 0, 0, 0, true, false);
+        static final Totals ZERO = new Totals(null, 0, 0, 0, 0, false, false);
+        static final Totals END = new Totals(null, 0, 0, 0, 0, false, true);
+        static final Totals FAILED = new Totals(null, 0, 0, 0, 0, true, false);
 
         static Totals window(long traces) {
-            return new Totals(traces, 0, 0, 0, false, false);
+            return new Totals(traces, 0, 0, 0, 0, false, false);
         }
 
         Totals plus(Totals that) {
-            return new Totals(windowTraces != null ? windowTraces : that.windowTraces, labelled + that.labelled,
-                    other + that.other, skipped + that.skipped, failed || that.failed, complete || that.complete);
+            return new Totals(windowTraces != null ? windowTraces : that.windowTraces, read + that.read,
+                    written + that.written, other + that.other, skipped + that.skipped, failed || that.failed,
+                    complete || that.complete);
         }
 
         LabelPassOutcome outcome() {
@@ -117,8 +139,9 @@ public class TopicWindowLabelService {
     }
 
     /**
-     * Labels the traces of the project's last saved window that have no {@code trace_topics} row of that run yet, until
-     * none is left or {@code deadline}. A pass that ends complete marks the run's labels complete. Never errors: how it
+     * Gives the traces of the project's last saved window their topic by that list, writing only the ones that change
+     * or are stale, until it is done or {@code deadline}. A pass that ends complete marks the run's labels complete,
+     * with the list's labeller fingerprint. Never errors: how it
      * ended is the outcome. A project with no saved list is complete. The caller runs it as a claimed run of the project
      * ({@link TopicProjectDAO#claim}), so no run of the project saves meanwhile: that would make this pass label with a
      * list that is no longer the project's.
@@ -149,12 +172,15 @@ public class TopicWindowLabelService {
      * labelled by the list before the save. A discovery run's window ends at tomorrow's start, after its save.
      */
     private Saved saved(TopicRunStore.SavedList list) {
-        var windowUntil = list.project().windowUntil();
-        var lastSuccessAt = list.project().lastSuccessAt();
+        var project = list.project();
+        var windowUntil = project.windowUntil();
+        var lastSuccessAt = project.lastSuccessAt();
         var to = lastSuccessAt != null && lastSuccessAt.isAfter(windowUntil) ? lastSuccessAt : windowUntil;
         var from = windowUntil.minus(Duration.ofDays(config.getRun().getWindowDays()));
-        return new Saved(list.project().listRunId(), from, to,
-                algorithm.labeller(list.topics(), list.project().otherVectors()));
+        var fingerprint = algorithm.labellerFingerprint(list.topics(), project.otherVectors());
+        return new Saved(project.listRunId(), from, to, lastSuccessAt != null ? lastSuccessAt : Instant.EPOCH,
+                algorithm.labeller(list.topics(), project.otherVectors()), fingerprint,
+                !fingerprint.equals(project.labelsFingerprint()));
     }
 
     private Mono<LabelPassOutcome> pass(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved,
@@ -167,7 +193,11 @@ public class TopicWindowLabelService {
             ended(workspace, projectId, saved, trigger, LabelPassOutcome.CUT, Totals.ZERO, started);
             return Mono.just(LabelPassOutcome.CUT);
         }
-        return steps(workspace, projectId, saved)
+        // A pass's pages start once no arrival step can still be writing topics of the list before this one.
+        var arrivalWait = Duration.between(Instant.now(),
+                saved.savedAt().plus(config.getArrival().getTimeout().toJavaDuration()));
+        return Mono.delay(arrivalWait.isNegative() ? Duration.ZERO : arrivalWait)
+                .thenMany(steps(workspace, projectId, saved))
                 .concatWith(Mono.just(Totals.END))
                 .onErrorResume(exception -> {
                     log.warn("Topics labelling pass failed, a later pass labels the rest, run '{}', project '{}'",
@@ -193,10 +223,7 @@ public class TopicWindowLabelService {
                 });
     }
 
-    /**
-     * The pass's outcome. One that reached the end checks the window for a trace left, and is cut when it finds one;
-     * otherwise it marks the run's labels complete, and fails when the check or the mark fails.
-     */
+    /** The pass's outcome. One that reached the end marks the run's labels complete, and fails when the mark fails. */
     private Mono<LabelPassOutcome> finish(String workspaceId, UUID projectId, Saved saved, Totals totals) {
         var outcome = totals.outcome();
         if (outcome == LabelPassOutcome.CUT) {
@@ -205,43 +232,19 @@ public class TopicWindowLabelService {
         if (outcome != LabelPassOutcome.COMPLETE) {
             return Mono.just(outcome);
         }
-        return anyLeft(projectId, saved)
-                .flatMap(left -> {
-                    if (left) {
-                        log.info("Topics labelling pass found a trace left behind its pages, a later pass labels it, "
-                                + "run '{}', project '{}'", saved.runId(), projectId);
-                        return Mono.just(LabelPassOutcome.CUT);
+        return store.markLabelsComplete(workspaceId, projectId, saved.runId(), saved.fingerprint())
+                .doOnNext(marked -> {
+                    if (!marked) {
+                        log.info("Topics labelling pass complete for a run that is no longer saved, run '{}', "
+                                + "project '{}'", saved.runId(), projectId);
                     }
-                    return store.markLabelsComplete(workspaceId, projectId, saved.runId())
-                            .doOnNext(marked -> {
-                                if (!marked) {
-                                    log.info("Topics labelling pass complete for a run that is no longer saved, "
-                                            + "run '{}', project '{}'", saved.runId(), projectId);
-                                }
-                            })
-                            .thenReturn(LabelPassOutcome.COMPLETE);
                 })
+                .thenReturn(LabelPassOutcome.COMPLETE)
                 .onErrorResume(exception -> {
-                    log.warn(
-                            "Topics labelling pass could not check or mark its run complete, a later pass does, run '{}', "
-                                    + "project '{}'",
-                            saved.runId(), projectId, exception);
+                    log.warn("Topics labelling pass could not mark its run complete, a later pass does, run '{}', "
+                            + "project '{}'", saved.runId(), projectId, exception);
                     return Mono.just(LabelPassOutcome.FAILED);
                 });
-    }
-
-    /**
-     * Whether the window has a trace with a usable vector and no row of the run. Traces with an unusable vector never
-     * get one, so a full page of them reads on to the next.
-     */
-    private Mono<Boolean> anyLeft(UUID projectId, Saved saved) {
-        int chunk = config.getRun().getLabelPageTraces();
-        var window = new Slice(saved.from(), saved.to());
-        return page(projectId, saved, window, 1, "", chunk)
-                .expand(page -> page.hasNext(chunk)
-                        ? page(projectId, saved, window, page.number() + 1, page.last(), chunk)
-                        : Mono.empty())
-                .any(page -> page.rows().stream().anyMatch(row -> TopicEmbedding.usable(row.vector())));
     }
 
     private void ended(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, LabelTrigger trigger,
@@ -249,35 +252,45 @@ public class TopicWindowLabelService {
         var duration = Duration.ofNanos(System.nanoTime() - started);
         metrics.phase(workspace, "label", duration);
         metrics.labelPass(workspace, trigger, outcome);
-        log.info("Topics labelling pass ended, run '{}', project '{}', trigger '{}', outcome '{}', window traces '{}', "
-                + "labelled '{}', Other '{}', skipped '{}', seconds '{}'", saved.runId(), projectId, trigger.getValue(),
-                outcome.getValue(), totals.windowTraces(), totals.labelled(), totals.other(), totals.skipped(),
-                duration.toMillis() / 1000.0);
+        log.info("Topics labelling pass ended, run '{}', project '{}', trigger '{}', outcome '{}', relabel '{}', "
+                + "window traces '{}', read '{}', written '{}', Other '{}', skipped '{}', seconds '{}'", saved.runId(),
+                projectId, trigger.getValue(), outcome.getValue(), saved.relabel(), totals.windowTraces(),
+                totals.read(), totals.written(), totals.other(), totals.skipped(), duration.toMillis() / 1000.0);
     }
 
-    /** The window's count, then what each page added. */
+    /** The window's count, then what each page of each sweep added: the relabel sweep when one is due, then the stale. */
     private Flux<Totals> steps(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved) {
-        int chunk = config.getRun().getLabelPageTraces();
         int sliceTraces = config.getRun().getLabelSliceTraces();
         var countTimeout = config.getRun().getCountTimeout().toJavaDuration();
-        // A full slice takes ceil(sliceTraces / chunk) pages and one empty page; the rest is margin for ties on a
-        // bound and for traces that got their vector after the count.
-        int maxPages = (sliceTraces + chunk - 1) / chunk + 2;
+        var sweeps = saved.relabel() ? List.of(Sweep.RELABEL, Sweep.STALE) : List.of(Sweep.STALE);
         return windowDAO.countAndBounds(projectId, saved.from(), saved.to(), sliceTraces,
                 countTimeout.toSeconds())
                 .timeout(countTimeout)
-                .flatMapMany(window -> Flux.fromIterable(slices(saved.from(), saved.to(), window.bounds()))
-                        // The next page is read only once the step before it has inserted: the heap holds one page.
-                        .concatMap(slice -> step(workspace, projectId, saved, slice, 1, "", chunk, maxPages)
-                                .expand(step -> {
-                                    var page = step.page();
-                                    return page.hasNext(chunk) && page.number() < maxPages
-                                            ? step(workspace, projectId, saved, slice, page.number() + 1, page.last(),
-                                                    chunk, maxPages)
-                                            : Mono.empty();
-                                })
-                                .map(Step::totals))
-                        .startWith(Totals.window(window.traces())));
+                .flatMapMany(window -> {
+                    var slices = slices(saved.from(), saved.to(), window.bounds());
+                    return Flux.fromIterable(sweeps)
+                            .concatMap(sweep -> Flux.fromIterable(slices)
+                                    .concatMap(slice -> sweep(workspace, projectId, saved, sweep, slice)))
+                            .startWith(Totals.window(window.traces()));
+                });
+    }
+
+    /** One slice of a sweep, page after page: the next page is read only once the one before has inserted. */
+    private Flux<Totals> sweep(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Sweep sweep,
+            Slice slice) {
+        int chunk = config.getRun().getLabelPageTraces();
+        // A full slice takes ceil(sliceTraces / chunk) pages and one empty page; the rest is margin for ties on a
+        // bound and for traces that got their vector after the count.
+        int maxPages = (config.getRun().getLabelSliceTraces() + chunk - 1) / chunk + 2;
+        return step(workspace, projectId, saved, sweep, slice, 1, "", chunk, maxPages)
+                .expand(step -> {
+                    var page = step.page();
+                    return page.hasNext(chunk) && page.number() < maxPages
+                            ? step(workspace, projectId, saved, sweep, slice, page.number() + 1, page.last(), chunk,
+                                    maxPages)
+                            : Mono.empty();
+                })
+                .map(Step::totals);
     }
 
     private static Duration left(Instant deadline) {
@@ -300,20 +313,16 @@ public class TopicWindowLabelService {
         return slices;
     }
 
-    private Mono<Step> step(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Slice slice, int number,
-            String after, int chunk, int maxPages) {
-        return page(projectId, saved, slice, number, after, chunk)
-                .flatMap(page -> labelPage(workspace, projectId, saved, page, chunk, maxPages)
-                        .map(totals -> new Step(page, totals)));
-    }
-
-    private Mono<Page> page(UUID projectId, Saved saved, Slice slice, int number, String after, int chunk) {
+    private Mono<Step> step(TopicsMetrics.Workspace workspace, UUID projectId, Saved saved, Sweep sweep, Slice slice,
+            int number, String after, int chunk, int maxPages) {
         var readTimeout = config.getRun().getReadTimeout().toJavaDuration();
-        return windowDAO.readUnlabelled(projectId, saved.runId(), slice.from(), slice.to(), after, chunk,
+        return windowDAO.readPage(projectId, slice.from(), slice.to(), after, chunk, sweep == Sweep.STALE,
                 readTimeout.toSeconds())
                 .collectList()
                 .timeout(readTimeout)
-                .map(rows -> new Page(slice, number, after, rows));
+                .map(rows -> new Page(sweep, slice, number, after, rows))
+                .flatMap(page -> labelPage(workspace, projectId, saved, page, chunk, maxPages)
+                        .map(totals -> new Step(page, totals)));
     }
 
     /**
@@ -337,15 +346,32 @@ public class TopicWindowLabelService {
                     + "from '{}', to '{}', max pages '{}'", saved.runId(), projectId, page.slice().from(),
                     page.slice().to(), maxPages);
         }
-        var traces = page.rows().stream().map(row -> new WindowTrace(row.traceId(), row.traceCreatedAt())).toList();
+        var rows = page.rows();
         return Mono.fromCallable(() -> saved.labeller()
-                .label(page.rows().stream().map(TopicWindowDAO.WindowVector::vector).toList()))
+                .label(rows.stream().map(TopicWindowDAO.WindowVector::vector).toList()))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(labels -> {
-                    var rows = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces, labels);
-                    long other = rows.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
-                    var totals = new Totals(null, rows.size(), other, labels.length - rows.size(), capped, false);
-                    return store.insertTraceTopics(workspace, rows).thenReturn(totals);
+                    var traces = new ArrayList<WindowTrace>();
+                    var topics = new ArrayList<UUID>();
+                    long skipped = 0;
+                    for (int i = 0; i < rows.size(); i++) {
+                        var row = rows.get(i);
+                        if (labels[i] == null) {
+                            skipped++;
+                        } else if (row.stale() || !labels[i].equals(row.topicId())) {
+                            traces.add(new WindowTrace(row.traceId(), row.traceCreatedAt()));
+                            topics.add(labels[i]);
+                        }
+                    }
+                    // Stamped with the page's read time, not the insert's: a vector written in between stays newer
+                    // than its trace's row, so the trace stays stale, and its arrival row, if any, stays the latest.
+                    var written = TopicRunRows.traceTopics(workspace.id(), projectId, saved.runId(), traces,
+                            topics.toArray(UUID[]::new)).stream()
+                            .map(row -> row.toBuilder().lastUpdatedAt(rows.getFirst().readAt()).build())
+                            .toList();
+                    long other = written.stream().filter(row -> TraceTopic.OTHER.equals(row.topicId())).count();
+                    var totals = new Totals(null, rows.size(), written.size(), other, skipped, capped, false);
+                    return store.insertTraceTopics(workspace, written).thenReturn(totals);
                 });
     }
 }
