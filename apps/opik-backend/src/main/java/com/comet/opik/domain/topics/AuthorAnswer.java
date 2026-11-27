@@ -31,10 +31,6 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics, int unmatched) {
     /** The {@code topic} of a cluster that has no topic. */
     static final String OTHER = "-1";
 
-    public AuthorAnswer(@NonNull List<AuthorTopic> topics) {
-        this(topics, 0);
-    }
-
     /**
      * The {@code output} of a generate call with the author task's schema ({@code topics/tasks/author.yaml}):
      * opik-inference parses and checks it against the schema, so it is the object itself. Text or null is not parsed:
@@ -61,10 +57,14 @@ public record AuthorAnswer(@NonNull List<AuthorTopic> topics, int unmatched) {
         var topicOf = new LinkedHashMap<Integer, Integer>();
         int unmatched = 0;
         for (var entry : firstMention.entrySet()) {
+            // Before the name lookup, so a topic named "-1" cannot take the clusters sent to Other.
+            if (OTHER.equals(entry.getValue().strip())) {
+                continue;
+            }
             var topic = byName.getOrDefault(entry.getValue(), byKey.get(AuthorApplier.nameKey(entry.getValue())));
             if (topic != null) {
                 topicOf.put(entry.getKey(), topic);
-            } else if (!OTHER.equals(entry.getValue().strip())) {
+            } else {
                 unmatched++;
             }
         }

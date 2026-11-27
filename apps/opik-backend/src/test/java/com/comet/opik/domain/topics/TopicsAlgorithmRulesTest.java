@@ -92,7 +92,7 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("catch-all names: the author's rule drops a name only when it is a catch-all as a whole")
         void catchAllName(String name, boolean expected) {
             var groups = List.of(GroupSummary.builder().group(0).size(1).build());
-            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(0))));
+            var answer = authorAnswer(List.of(new AuthorTopic(name, "d", List.of(0))));
 
             var applied = AuthorApplier.apply(answer, groups, 10);
 
@@ -134,6 +134,16 @@ class TopicsAlgorithmRulesTest {
             assertThat(AuthorApplier.apply(answer, groups, 10).other()).containsExactly(2, 3);
         }
 
+        @Test
+        @DisplayName("a topic named \"-1\" takes no cluster the answer sent to Other")
+        void otherBeforeName() throws IOException {
+            var answer = AuthorAnswer.parse(InferenceJson.MAPPER.readTree("{\"topics\": [{\"name\": \" -1 \", "
+                    + "\"definition\": \"d\"}], \"assignment\": [{\"cluster\": 0, \"topic\": \"-1\"}]}"));
+
+            assertThat(answer.topics().getFirst().clusters()).isEmpty();
+            assertThat(answer.unmatched()).isZero();
+        }
+
         @ParameterizedTest(name = "{0}")
         @CsvSource(delimiter = '|', value = {
                 "{\"topics\": []}",
@@ -171,6 +181,17 @@ class TopicsAlgorithmRulesTest {
     @Nested
     @DisplayName("the author prompt")
     class Prompt {
+
+        @Test
+        @DisplayName("startup fails when the author answer of maxTopics topics and maxGroups groups can pass the "
+                + "author task's max_tokens")
+        void authorAnswerBudget() {
+            var config = TopicsTestAlgorithm.config();
+            config.setMaxGroups(200);
+
+            assertThatThrownBy(() -> TopicsTestAlgorithm.algorithm(config)).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("author answer");
+        }
 
         @Test
         @DisplayName("examples: the repeated texts, then the ones nearest the centre, no text twice")
@@ -298,7 +319,7 @@ class TopicsAlgorithmRulesTest {
             for (int j = 1; j <= 11; j++) {
                 topics.add(new AuthorTopic("Topic " + j, "d", List.of(j)));
             }
-            var applied = AuthorApplier.apply(new AuthorAnswer(topics), groups, 10);
+            var applied = AuthorApplier.apply(authorAnswer(topics), groups, 10);
             assertThat(applied.topics()).extracting(AppliedTopic::name)
                     .containsExactly("Topic 1", "Topic 2", "Topic 3", "Topic 4", "Topic 5", "Topic 6", "Topic 7",
                             "Topic 8", "Topic 9", "Topic 10");
@@ -308,7 +329,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("a group goes to the largest topic that lists it; invalid and repeated ids are ignored")
         void claims() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic(" Small ", " d ", List.of(5, 99, -1)),
                     new AuthorTopic("Big", "d", List.of(1, 2, 2, 5)),
                     new AuthorTopic("Empty", "d", List.of(1))));
@@ -322,7 +343,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("names and definitions are stripped as Python strips them; ties keep the answer's order")
         void strip() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic(" B ", " b ", List.of(3)),
                     new AuthorTopic("A", "a", List.of(4, -5))));
             var flat = IntStream.range(0, 6)
@@ -335,7 +356,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("topics with the same name merge into the largest one, at the first one's place")
         void sameNames() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic("Email Drafting", "small", List.of(9, 4)),
                     new AuthorTopic("Billing", "d", List.of(2)),
                     new AuthorTopic(" email\u00A0 drafting", "large", List.of(3, 4)),
@@ -351,7 +372,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("a blank name is no name: its groups go to Other and it takes no slot")
         void blankName() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic(" \u00A0 ", "d", List.of(1)),
                     new AuthorTopic("Billing", "d", List.of(2))));
             var applied = AuthorApplier.apply(answer, groups, 1);
@@ -363,7 +384,7 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("a name over 255 code points is cut to 255, so the save can't fail on it")
         void longName() {
             var name = "\uD83D\uDE00".repeat(300);
-            var answer = new AuthorAnswer(List.of(new AuthorTopic(name, "d", List.of(1))));
+            var answer = authorAnswer(List.of(new AuthorTopic(name, "d", List.of(1))));
             var stored = AuthorApplier.apply(answer, groups, 10).topics().getFirst().name();
             assertThat(stored.codePointCount(0, stored.length())).isEqualTo(TopicText.MAX_NAME_LENGTH);
             assertThat(TopicText.name(" Billing ")).isEqualTo("Billing");
@@ -373,7 +394,7 @@ class TopicsAlgorithmRulesTest {
         @DisplayName("two names that share their first 255 code points are one stored name, so they merge")
         void sameNameAfterTheCut() {
             var prefix = "a".repeat(TopicText.MAX_NAME_LENGTH);
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic(prefix + " one", "d", List.of(1)),
                     new AuthorTopic(prefix + " two", "d", List.of(2))));
 
@@ -388,7 +409,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("same name: outer and inner whitespace as Python splits it, and case, don't matter")
         void sameNameKey() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic("\u00A0 Email \t\u2003Drafting \n", "d", List.of(1)),
                     new AuthorTopic("email drafting", "d", List.of(2))));
 
@@ -401,7 +422,7 @@ class TopicsAlgorithmRulesTest {
         @Test
         @DisplayName("a topic that claims no group takes no slot")
         void emptyTopicTakesNoSlot() {
-            var answer = new AuthorAnswer(List.of(
+            var answer = authorAnswer(List.of(
                     new AuthorTopic("Nothing", "d", List.of(99)),
                     new AuthorTopic("Billing", "d", List.of(2))));
 
@@ -746,5 +767,9 @@ class TopicsAlgorithmRulesTest {
             labels[u] = traceLabels[merged.firstIndex()[u]];
         }
         return GroupSummaries.authorExamples(merged, labels, centres, frequent, extra);
+    }
+
+    private static AuthorAnswer authorAnswer(List<AuthorTopic> topics) {
+        return AuthorAnswer.builder().topics(topics).build();
     }
 }

@@ -33,6 +33,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
 
     /** The k-means seed: fixed, so the same window always gives the same groups. */
     static final long SEED = 0;
+    /** Upper estimates of the author answer: a topic's name and definition, and a group's {cluster, topic name}. */
+    static final int AUTHOR_TOKENS_PER_TOPIC = 60;
+    static final int AUTHOR_TOKENS_PER_GROUP = 20;
 
     private final AlgorithmConfig config;
     private final TopicTasks tasks;
@@ -49,6 +52,14 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                         + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) is above the limit, "
                         + "limit '%s', max_tokens '%s'",
                 BatchGenerateItem.MAX_MAX_TOKENS, verifyMaxTokens);
+        // The author answer lists every topic and names a topic for every group: a cut-off answer cannot be read, so
+        // every discovery run would end llm_bad_answer.
+        int authorAnswerTokens = config.getMaxTopics() * AUTHOR_TOKENS_PER_TOPIC
+                + config.getMaxGroups() * AUTHOR_TOKENS_PER_GROUP;
+        Preconditions.checkState(authorAnswerTokens <= tasks.author().effectiveMaxTokens(),
+                "the author answer of topics.algorithm.maxTopics topics and maxGroups groups can be longer than the "
+                        + "max_tokens of topics/tasks/author.yaml, max_tokens '%s', estimate '%s'",
+                tasks.author().effectiveMaxTokens(), authorAnswerTokens);
     }
 
     @Override

@@ -2816,7 +2816,9 @@ topics:
     #  Description: Fewest k-means groups a discovery run makes (never more than its unique texts)
     minGroups: ${TOPICS_ALGORITHM_MIN_GROUPS:-30}
     #  Default: 50
-    #  Description: Most k-means groups a discovery run makes; the author prompt lists every group. At least minGroups
+    #  Description: Most k-means groups a discovery run makes; the author prompt lists every group. At least minGroups.
+    #  The author answer names a topic per group, so maxTopics x 60 + this x 20 must fit the max_tokens of
+    #  topics/tasks/author.yaml (2500), or startup fails
     maxGroups: ${TOPICS_ALGORITHM_MAX_GROUPS:-50}
     #  Default: 30
     #  Description: Unique texts per group: k = unique texts / textsPerGroup, within minGroups and maxGroups
