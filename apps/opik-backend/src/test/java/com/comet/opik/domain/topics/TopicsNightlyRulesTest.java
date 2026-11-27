@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -70,7 +71,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("one call for every pair; a missing or out-of-range pair is not verified")
         void answers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> {
                         assertThat(tag).isEqualTo("verify_naming");
                         assertThat(maxTokens).isEqualTo(60 + 25 * 2);
@@ -85,21 +86,16 @@ class TopicsNightlyRulesTest {
         }
 
         @Test
-        @DisplayName("a failed call gives no verdicts, unlike a bad answer, which verifies no pair")
+        @DisplayName("a failed call and an answer that is not a JSON object give no verdicts")
         void failed() {
-            var failed = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
-                    failing(RunError.LLM_TIMEOUT));
-            var bad = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
-                    (tag, prompt, schema, maxTokens) -> null);
-
-            assertThat(failed).isEmpty();
-            assertThat(bad).hasValueSatisfying(map -> assertThat(map).isEmpty());
+            assertThat(verdicts(failing(RunError.LLM_TIMEOUT))).isEmpty();
+            assertThat(verdicts((tag, prompt, schema, maxTokens) -> null)).isEmpty();
         }
 
         @Test
         @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
         void conflictingAnswers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> json(
                             """
                                     {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
@@ -114,12 +110,18 @@ class TopicsNightlyRulesTest {
                 "a number|, \"same\": 1"})
         @DisplayName("a same that is missing or not a boolean does not verify the pair")
         void sameNotBoolean(String label, String same) {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> json(
                             "{\"answers\": [{\"pair\": 0" + (same == null ? "" : same)
                                     + "}, {\"pair\": 1, \"same\": true}]}"));
 
             assertThat(verdicts).hasValueSatisfying(map -> assertThat(map).containsOnly(Map.entry(1, true)));
+        }
+
+        /** The verdicts of one verify call over {@link #pairs}; empty when the call goes to its failed path. */
+        private Optional<Map<Integer, Boolean>> verdicts(NightLlm llm) {
+            return drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG,
+                    map -> NightStep.done(Optional.of(map)), () -> NightStep.done(Optional.empty())), llm);
         }
     }
 
@@ -1228,10 +1230,12 @@ class TopicsNightlyRulesTest {
             assertThat(Arrays.stream(next.labels()).filter(label -> label == 1).count()).isEqualTo(80);
         }
 
-        @Test
-        @DisplayName("a failed verify call leaves the groups it checked in Other and out of the memory; they do not go "
-                + "to the second naming call, and the topic they were given keeps its prototypes")
-        void verify() {
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"a failed verify call", "a verify answer that is not a JSON object"})
+        @DisplayName("a failed verify call, or a verify answer that is not a JSON object, leaves the groups it checked "
+                + "in Other and out of the memory; they do not go to the second naming call, and the topic they were "
+                + "given keeps its prototypes")
+        void verify(String verify) {
             var state = state(1, topic("East", EAST), topic("North", NORTH));
             var tags = new ArrayList<String>();
             var llm = named(Map.of("naming", ASSIGN_BOTH_TO_NORTH), tags);
@@ -1240,7 +1244,10 @@ class TopicsNightlyRulesTest {
                     (tag, prompt, schema, maxTokens) -> {
                         if (tag.equals("verify_naming")) {
                             tags.add(tag);
-                            throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
+                            if (verify.equals("a failed verify call")) {
+                                throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
+                            }
+                            return null;
                         }
                         return llm.generate(tag, prompt, schema, maxTokens);
                     });

@@ -41,7 +41,8 @@ import java.util.function.Supplier;
  * A call that fails (timeout or error) leaves the groups it was deciding in Other tonight, not known Other
  * ({@link Result#OTHER_FAILED}), so they are candidates again on the next night: the naming call's groups, the groups
  * a failed verify was checking (they do not go to the second call, whose prompt says they belong to no live topic),
- * and the second call's groups.
+ * and the second call's groups. A verify answer that is not a JSON object gives no verdicts either, so it counts as a
+ * failed verify.
  */
 @Slf4j
 @UtilityClass
@@ -286,11 +287,7 @@ class ForcedBirth {
             if (pairs.isEmpty()) {
                 return NightStep.done(new Assigned(before, List.of()));
             }
-            return Verifier.ask(VERIFY_TAG, prompts, tasks.verify(), config).map(verdicts -> {
-                if (verdicts.isEmpty()) {
-                    return new Assigned(failed(before, pairs.stream().map(pair -> pair[0]).toList()), List.of());
-                }
-                var answers = verdicts.get();
+            return Verifier.ask(VERIFY_TAG, prompts, tasks.verify(), config, answers -> {
                 var decided = new Decisions(before);
                 var rejected = new ArrayList<NightGroup>();
                 for (int n = 0; n < pairs.size(); n++) {
@@ -302,8 +299,9 @@ class ForcedBirth {
                         rejected.add(byGroup.get(group));
                     }
                 }
-                return new Assigned(decided.named(), List.copyOf(rejected));
-            });
+                return NightStep.done(new Assigned(decided.named(), List.copyOf(rejected)));
+            }, () -> NightStep.done(
+                    new Assigned(failed(before, pairs.stream().map(pair -> pair[0]).toList()), List.of())));
         }
     }
 
