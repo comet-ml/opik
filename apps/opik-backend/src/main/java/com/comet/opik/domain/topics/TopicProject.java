@@ -38,8 +38,11 @@ import java.util.UUID;
  * @param savedRuns the saved runs, discovery run or nightly update
  * @param listRunId the run whose list is saved; the save is a compare-and-set on it
  * @param windowUntil the end of that run's window
- * @param labelsComplete false from the save until the labelling pass has given every trace of that window a
- *        {@code trace_topics} row of the run
+ * @param labelsComplete false from the save until the labelling pass has given every trace of that window the topic
+ *        the saved list labels it with, as its latest {@code trace_topics} row
+ * @param labelsFingerprint the {@link TopicAlgorithm#labellerFingerprint} of the list a labelling pass last completed
+ *        the window's labels with; a save keeps it only when the labels were complete, so it never names a pass that
+ *        was cut. Null when no pass completed since the labels were last incomplete at a save
  * @param otherVectors the known-Other prototype vectors, null when the run kept none
  * @param embedModel the model of the saved vectors, the topics' and {@code otherVectors}; their size is
  *        {@link TopicEmbedding#DIMENSIONS}
@@ -70,6 +73,7 @@ public record TopicProject(
         @Nullable UUID listRunId,
         @Nullable Instant windowUntil,
         boolean labelsComplete,
+        @Nullable String labelsFingerprint,
         @Nullable PrototypeVectors otherVectors,
         @Nullable String embedModel,
         @Nullable UUID runId,

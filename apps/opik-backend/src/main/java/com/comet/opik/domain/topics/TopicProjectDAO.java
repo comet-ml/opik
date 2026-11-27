@@ -286,12 +286,14 @@ public interface TopicProjectDAO {
     /**
      * Saves {@code runId}'s list on the project's row: a compare-and-set on {@code list_run_id}, which must still be
      * {@code expectedListRunId}, null for a discovery run. 0 when another run saved the project meanwhile, or the row is
-     * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first.
+     * gone. {@code saved_runs} counts every save; {@code first_built_at} keeps the first. The labels fingerprint stays
+     * only when the labels were complete: MySQL sets the columns left to right, so it reads the old flag.
      */
     @SqlUpdate("""
             UPDATE topic_projects
             SET saved_runs = saved_runs + 1, first_built_at = COALESCE(first_built_at, :savedAt),
                 last_success_at = :savedAt, list_run_id = :runId, window_until = :windowUntil,
+                labels_fingerprint = IF(labels_complete, labels_fingerprint, NULL),
                 labels_complete = FALSE, other_vectors = :otherVectors, embed_model = :embedModel
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
             """)
@@ -306,8 +308,8 @@ public interface TopicProjectDAO {
      */
     @SqlUpdate("""
             UPDATE topic_projects
-            SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, other_vectors = NULL,
-                embed_model = NULL
+            SET list_run_id = NULL, window_until = NULL, labels_complete = FALSE, labels_fingerprint = NULL,
+                other_vectors = NULL, embed_model = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId
             AND (run_status IS NULL OR run_status IN (<ended>))
             """)
@@ -321,22 +323,23 @@ public interface TopicProjectDAO {
     @SqlUpdate("""
             UPDATE topic_projects
             SET saved_runs = saved_runs + 1, last_success_at = :savedAt, list_run_id = NULL, window_until = NULL,
-                labels_complete = FALSE, other_vectors = NULL, embed_model = NULL
+                labels_complete = FALSE, labels_fingerprint = NULL, other_vectors = NULL, embed_model = NULL
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id <=> :expectedListRunId
             """)
     int clearList(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
             @Bind("expectedListRunId") UUID expectedListRunId, @Bind("savedAt") Instant savedAt);
 
     /**
-     * Marks the labels of the project's saved list complete. Only while the row still names {@code runId}: a pass that
-     * labelled an older run never marks a newer one. 0 when the row names another run or is gone.
+     * Marks the labels of the project's saved list complete, by the labeller of {@code fingerprint}. Only while the row
+     * still names {@code runId}: a pass that labelled an older run never marks a newer one. 0 when the row names
+     * another run or is gone.
      */
     @SqlUpdate("""
-            UPDATE topic_projects SET labels_complete = TRUE
+            UPDATE topic_projects SET labels_complete = TRUE, labels_fingerprint = :fingerprint
             WHERE workspace_id = :workspaceId AND project_id = :projectId AND list_run_id = :runId
             """)
     int markLabelsComplete(@Bind("workspaceId") String workspaceId, @Bind("projectId") UUID projectId,
-            @Bind("runId") UUID runId);
+            @Bind("runId") UUID runId, @Bind("fingerprint") String fingerprint);
 
     @SqlQuery("SELECT * FROM topic_projects WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)")
     List<TopicProject> findProjects(@Bind("workspaceId") String workspaceId,

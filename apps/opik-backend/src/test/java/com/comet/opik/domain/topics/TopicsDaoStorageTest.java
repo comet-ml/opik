@@ -18,12 +18,15 @@ import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.fasterxml.uuid.Generators;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.ConnectionFactory;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -260,41 +263,63 @@ class TopicsDaoStorageTest {
             assertThat(windowDAO.readWindow(projectId, from(), to(), BUILT, 60)
                     .contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
                     .extracting(TopicWindowDAO.WindowRow::traceId).containsAll(tied).hasSize(BUILT);
-            assertThat(windowDAO.readUnlabelled(projectId, newId(), from(), to(), "", BUILT,
-                    60).contextWrite(TopicsTestData.context(workspaceId)).collectList().block())
+            assertThat(page(workspaceId, projectId, "", BUILT, false))
                     .extracting(TopicWindowDAO.WindowVector::traceId).containsAll(tied).hasSize(BUILT);
         });
     }
 
     @Test
-    @DisplayName("the unlabelled read skips the traces with a row of the run, and only of that run")
-    void unlabelledSkipsTheRunsRowsOnly() {
+    @DisplayName("the page reads tell a trace's current topic and whether its label is stale: no label, a tombstoned "
+            + "label or a label older than the vector; the stale read returns only the stale traces")
+    void pageReadsTellTheLabelState() {
         var workspaceId = newId().toString();
         var projectId = newId();
         data.seed(workspaceId, projectId, 0, BUILT);
-        var runId = newId();
-        var labelled = TRACES.traceIds().subList(0, 10);
-        insertRunRows(workspaceId, projectId, runId, labelled, labelled.stream().map(id -> TraceTopic.OTHER).toList());
+        var ids = TRACES.traceIds();
+        var topicId = newId();
+        // Labelled after the vectors were written: current.
+        var labelled = ids.subList(0, 10);
+        insertRunRows(workspaceId, projectId, newId(), labelled, labelled.stream().map(id -> topicId).toList());
+        // The latest label is a tombstone.
+        for (var traceId : ids.subList(10, 12)) {
+            data.insertTraceTopic(workspaceId, projectId, traceId, createdAt(traceId), topicId,
+                    Instant.now().plusSeconds(3_600), 1);
+        }
+        // Labelled before the vector was written: a re-embed since.
+        for (var traceId : ids.subList(12, 14)) {
+            data.insertTraceTopic(workspaceId, projectId, traceId, createdAt(traceId), topicId,
+                    Instant.now().minusSeconds(3_600), 0);
+        }
 
-        assertThat(unlabelledIds(workspaceId, projectId, runId, "", BUILT))
-                .containsExactlyInAnyOrderElementsOf(TRACES.traceIds().subList(labelled.size(), BUILT));
-        assertThat(unlabelledIds(workspaceId, projectId, newId(), "", BUILT))
-                .containsExactlyInAnyOrderElementsOf(TRACES.traceIds());
+        var all = page(workspaceId, projectId, "", BUILT, false);
+        assertThat(all).hasSize(BUILT);
+        assertThat(all).filteredOn(row -> !row.stale()).extracting(TopicWindowDAO.WindowVector::traceId)
+                .containsExactlyInAnyOrderElementsOf(labelled);
+        assertThat(all).filteredOn(row -> !row.stale()).extracting(TopicWindowDAO.WindowVector::topicId)
+                .containsOnly(topicId);
+        assertThat(all).filteredOn(row -> ids.subList(10, 12).contains(row.traceId()))
+                .extracting(TopicWindowDAO.WindowVector::topicId).containsOnlyNulls();
+        assertThat(all).filteredOn(row -> ids.subList(12, 14).contains(row.traceId()))
+                .extracting(TopicWindowDAO.WindowVector::topicId).containsOnly(topicId);
+        assertThat(page(workspaceId, projectId, "", BUILT, true))
+                .allMatch(TopicWindowDAO.WindowVector::stale)
+                .extracting(TopicWindowDAO.WindowVector::traceId)
+                .containsExactlyInAnyOrderElementsOf(ids.subList(labelled.size(), BUILT));
     }
 
-    @Test
-    @DisplayName("the unlabelled read pages by trace id: each page starts after the last one, and the pages cover the "
-            + "slice once")
-    void unlabelledPagesByTraceId() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    @DisplayName("the page reads page by trace id: each page starts after the last one, and the pages cover the slice "
+            + "once")
+    void pagesByTraceId(boolean staleOnly) {
         var workspaceId = newId().toString();
         var projectId = newId();
         data.seed(workspaceId, projectId, 0, BUILT);
-        var runId = newId();
-        int page = 50;
+        int size = 50;
 
-        var first = unlabelledIds(workspaceId, projectId, runId, "", page);
-        var second = unlabelledIds(workspaceId, projectId, runId, first.getLast().toString(), page);
-        var third = unlabelledIds(workspaceId, projectId, runId, second.getLast().toString(), page);
+        var first = pageIds(workspaceId, projectId, "", size, staleOnly);
+        var second = pageIds(workspaceId, projectId, first.getLast().toString(), size, staleOnly);
+        var third = pageIds(workspaceId, projectId, second.getLast().toString(), size, staleOnly);
 
         var pages = new ArrayList<UUID>();
         pages.addAll(first);
@@ -570,16 +595,18 @@ class TopicsDaoStorageTest {
         var lastRunId = data.topicProject(projectId).listRunId();
 
         int older = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, projectId, newId()));
+                .markLabelsComplete(workspaceId, projectId, newId(), fingerprint()));
 
         assertThat(older).isZero();
         assertThat(data.topicProject(projectId).labelsComplete()).isFalse();
 
+        var fingerprint = fingerprint();
         int last = template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, projectId, lastRunId));
+                .markLabelsComplete(workspaceId, projectId, lastRunId, fingerprint));
 
         assertThat(last).isEqualTo(1);
         assertThat(data.topicProject(projectId).labelsComplete()).isTrue();
+        assertThat(data.topicProject(projectId).labelsFingerprint()).isEqualTo(fingerprint);
     }
 
     @Test
@@ -597,7 +624,7 @@ class TopicsDaoStorageTest {
         data.savedList(workspaceId, complete, NIGHT.minus(Duration.ofDays(4)), BUILT);
         var completeRunId = data.topicProject(complete).listRunId();
         template.inTransaction(WRITE, handle -> handle.attach(TopicProjectDAO.class)
-                .markLabelsComplete(workspaceId, complete, completeRunId));
+                .markLabelsComplete(workspaceId, complete, completeRunId, fingerprint()));
         data.savedList(newId().toString(), newId(), NIGHT.minus(Duration.ofDays(5)), BUILT);
 
         var unfinished = template.inTransaction(READ_ONLY,
@@ -881,7 +908,7 @@ class TopicsDaoStorageTest {
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.LABELS, NIGHT),
                     dao.queue(workspaceId, listless, newId(), TopicProject.RunMode.UPDATE, NIGHT),
                     dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.DISCOVERY, NIGHT));
-            dao.markLabelsComplete(workspaceId, listed, buildRun);
+            dao.markLabelsComplete(workspaceId, listed, buildRun, fingerprint());
             var labelsComplete = dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.LABELS, NIGHT);
             return List.of(refused.get(0), refused.get(1), refused.get(2), labelsComplete,
                     dao.queue(workspaceId, listed, newId(), TopicProject.RunMode.UPDATE, NIGHT),
@@ -954,12 +981,24 @@ class TopicsDaoStorageTest {
         dao.markSaved(workspaceId, projectId, runId, at.plusSeconds(1));
     }
 
-    private List<UUID> unlabelledIds(String workspaceId, UUID projectId, UUID runId, String after, int limit) {
-        return windowDAO.readUnlabelled(projectId, runId, from(), to(), after, limit, 60)
+    private List<TopicWindowDAO.WindowVector> page(String workspaceId, UUID projectId, String after, int limit,
+            boolean staleOnly) {
+        return windowDAO.readPage(projectId, from(), to(), after, limit, staleOnly, 60)
                 .contextWrite(TopicsTestData.context(workspaceId))
-                .map(TopicWindowDAO.WindowVector::traceId)
                 .collectList()
                 .block();
+    }
+
+    /** The page's trace ids in order: the read itself returns them in no order. */
+    private List<UUID> pageIds(String workspaceId, UUID projectId, String after, int limit, boolean staleOnly) {
+        return page(workspaceId, projectId, after, limit, staleOnly).stream()
+                .map(TopicWindowDAO.WindowVector::traceId)
+                .sorted(Comparator.comparing(UUID::toString))
+                .toList();
+    }
+
+    private static Instant createdAt(UUID traceId) {
+        return TRACES.createdAt().get(TRACES.traceIds().indexOf(traceId));
     }
 
     private List<UUID> sampleIds(String workspaceId, UUID projectId, Instant from, Instant to, int limit) {
@@ -1003,6 +1042,11 @@ class TopicsDaoStorageTest {
                 .toList();
         traceTopicsDAO.insert(rows).block();
         return rows;
+    }
+
+    /** A random labels fingerprint, 64 hex characters as a pass stores it. */
+    private static String fingerprint() {
+        return RandomStringUtils.secure().next(64, "0123456789abcdef");
     }
 
     private static UUID traceId(Instant at) {
