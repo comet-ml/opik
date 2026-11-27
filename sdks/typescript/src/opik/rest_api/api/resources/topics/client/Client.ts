@@ -195,6 +195,93 @@ export class TopicsClient {
     }
 
     /**
+     * Queues the project's nightly update for the night date (UTC; default today, at most tomorrow, at least the vectors backfill window ago) and returns its run id; any pod runs it. Its window ends at the night's start. The run's outcome is on the project's topic_projects row while it is the project's latest run, and in the run's logs. The workspace is opted in to topics at stage nightly or later, the project has a list whose window ends before the night, its window holds topics.run.minVectors vectors, and it has no run in flight. topics.runs.maxInFlight and the night's budget do not apply, and the project's night fields are not written.
+     *
+     * @param {string} projectId
+     * @param {OpikApi.RunProjectTopicsNightRequest} request
+     * @param {TopicsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.ConflictError}
+     * @throws {@link OpikApi.ServiceUnavailableError}
+     *
+     * @example
+     *     await client.topics.runProjectTopicsNight("projectId", {
+     *         workspaceId: "workspace_id"
+     *     })
+     */
+    public runProjectTopicsNight(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsNightRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__runProjectTopicsNight(projectId, request, requestOptions));
+    }
+
+    private async __runProjectTopicsNight(
+        projectId: string,
+        request: OpikApi.RunProjectTopicsNightRequest,
+        requestOptions?: TopicsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const { workspaceId, night } = request;
+        const _queryParams: Record<string, unknown> = {
+            workspace_id: workspaceId,
+            night,
+        };
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/internal/topics/projects/${core.url.encodePathParam(projectId)}/night`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                case 503:
+                    throw new OpikApi.ServiceUnavailableError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/internal/topics/projects/{projectId}/night",
+        );
+    }
+
+    /**
      * The project's topics over the window, the last topics.run.windowDays UTC days (default 30), today included: per topic its count, share, rank and a daily series, plus Other's daily series. Counts can be up to 5 minutes old. status is disabled when the workspace is not opted in to topics, collecting while the project has no topics yet, too_large when a ClickHouse read hit a rows, bytes or memory guard (a retry answers the same, so do not retry), and ready otherwise. Fields of other states are omitted.
      *
      * @param {OpikApi.GetProjectTopicsRequest} request
