@@ -7,6 +7,7 @@ import cohere
 from opik.types import LLMProvider
 
 from . import chat_stream_aggregator, cohere_chat_decorator
+from ... import analytics
 
 CohereClient = TypeVar("CohereClient", cohere.ClientV2, cohere.AsyncClientV2)
 
@@ -38,6 +39,7 @@ def track_cohere(
     Returns:
         The Cohere client with integrated Opik tracking.
     """
+    analytics.track_event("integration", "cohere")
     if hasattr(cohere_client, "opik_tracked"):
         return cohere_client
 
