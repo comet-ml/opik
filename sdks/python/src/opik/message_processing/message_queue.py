@@ -33,6 +33,25 @@ class MessageQueue(Generic[T]):
         self._unfinished_tasks = 0
         self._eviction_callback: Optional[Callable[[T], None]] = None
         self.max_size = max_length
+        self._delivery_paused_until = 0.0
+
+    def get_delivery_paused_until(self) -> float:
+        """Monotonic deadline until which every consumer must pause deliveries.
+
+        A 429 applies to the queue, not to the single consumer that received it:
+        all consumers read this same deadline before taking a message.
+        """
+        with self._cond:
+            return self._delivery_paused_until
+
+    def set_delivery_paused_until(self, until: float) -> None:
+        """Extend the shared pause.
+
+        A later, shorter retry must not end an active pause early.
+        """
+        with self._cond:
+            if until > self._delivery_paused_until:
+                self._delivery_paused_until = until
 
     def set_eviction_callback(self, callback: Callable[[T], None]) -> None:
         """Sets the callback invoked with each message discarded by a full queue."""

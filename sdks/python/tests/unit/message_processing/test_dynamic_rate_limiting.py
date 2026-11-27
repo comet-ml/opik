@@ -1,10 +1,16 @@
+import threading
 import time
 from unittest import mock
 
 import pytest
 
 from opik import exceptions, synchronization
-from opik.message_processing import streamer_constructors, messages, queue_consumer
+from opik.message_processing import (
+    message_queue,
+    streamer_constructors,
+    messages,
+    queue_consumer,
+)
 
 MAX_QUEUE_SIZE = 10
 
@@ -127,3 +133,75 @@ def test_dynamic_rate_limiting__rate_limited__check_streamer_flush_is_blocking_u
 
     # we expect max_limit calls before retry plus one call after waiting for the retry
     assert counter["count"] == max_limit + 1
+
+
+def test_dynamic_rate_limiting__rate_limited__pause_is_shared_by_all_consumers():
+    retry_after = 0.4
+    queue = message_queue.MessageQueue(max_length=None)
+    processor = mock.Mock()
+
+    call_times = []
+    call_lock = threading.Lock()
+    state = {"first": True}
+
+    def process(message):
+        # Every send is an HTTP round trip, as in the issue reproduction.
+        time.sleep(0.01)
+        with call_lock:
+            call_times.append(time.monotonic())
+            is_first = state["first"]
+            state["first"] = False
+        if is_first:
+            raise exceptions.OpikCloudRequestsRateLimited(
+                headers={}, retry_after=retry_after
+            )
+
+    processor.process.side_effect = process
+
+    consumers = [
+        queue_consumer.QueueConsumer(queue, processor, name=f"rate-limit-c{i}")
+        for i in range(4)
+    ]
+    for consumer in consumers:
+        consumer.start()
+
+    try:
+        for _ in range(50):
+            queue.put(messages.BaseMessage())
+
+        assert synchronization.until(
+            lambda: queue.get_delivery_paused_until() > time.monotonic(),
+            max_try_seconds=1.0,
+        )
+        paused_until = queue.get_delivery_paused_until()
+
+        # All consumers share the queue-wide deadline, not a per-thread one.
+        assert all(
+            consumer._message_queue.get_delivery_paused_until() == paused_until
+            for consumer in consumers
+        )
+
+        # The deferred message must not be popped and re-enqueued in a tight
+        # loop, and the rest of the queue must not be sent during the window.
+        time.sleep(retry_after * 0.5)
+        with call_lock:
+            early_calls = [at for at in call_times if at < paused_until]
+        # A message already popped when the 429 lands can still be in flight;
+        # at most one wave of those can slip through, never the rest of the queue.
+        assert len(early_calls) <= 2 * len(consumers) + 2, early_calls
+
+        pending = list(queue._deque)
+        assert max((m.delivery_attempts for m in pending), default=0) < 10, [
+            m.delivery_attempts for m in pending
+        ]
+
+        # Once the Retry-After window expires the queue drains normally.
+        processor.process.side_effect = None
+        assert synchronization.until(
+            lambda: queue.all_tasks_done(), max_try_seconds=retry_after * 10
+        )
+    finally:
+        for consumer in consumers:
+            consumer.close()
+        for consumer in consumers:
+            consumer.join(timeout=2.0)

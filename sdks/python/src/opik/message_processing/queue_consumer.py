@@ -35,7 +35,10 @@ class QueueConsumer(threading.Thread):
 
     def _loop(self) -> None:
         now = time.monotonic()
-        if now < self.next_message_time:
+        # The queue-wide pause is shared by every consumer; a 429 seen by one
+        # of them must stop all deliveries until the Retry-After deadline.
+        paused_until = self._message_queue.get_delivery_paused_until()
+        if now < self.next_message_time or now < paused_until:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
             return
 
@@ -46,11 +49,17 @@ class QueueConsumer(threading.Thread):
             if message is None:
                 return
 
-            if message.delivery_time <= now:
+            if (
+                message.delivery_time <= now
+                and time.monotonic() >= self._message_queue.get_delivery_paused_until()
+            ):
                 self._process_message(message)
             else:
                 # put a message back to keep an order in the queue
                 self._push_message_back(message)
+                # The deferred message stays at the head; without a sleep here
+                # the other consumers repeatedly pop and re-enqueue it.
+                time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
 
         except Empty:
             time.sleep(SLEEP_BETWEEN_LOOP_ITERATIONS)
@@ -62,10 +71,14 @@ class QueueConsumer(threading.Thread):
                 + 1,  # add 1 to account for the current message
                 limit_exception.headers,
             )
-            # set the next iteration time to avoid rate limiting
-            self.next_message_time = now + limit_exception.retry_after
+            # Set both this consumer's local deadline (kept for the existing
+            # single-consumer contract) and the queue-wide one the other
+            # consumers check before taking any message.
+            retry_until = time.monotonic() + limit_exception.retry_after
+            self.next_message_time = retry_until
+            self._message_queue.set_delivery_paused_until(retry_until)
             if message is not None:
-                message.delivery_time = self.next_message_time
+                message.delivery_time = retry_until
                 # put a message back to keep an order in the queue
                 self._push_message_back(message)
         except Exception as ex:
