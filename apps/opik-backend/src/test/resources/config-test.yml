@@ -1210,6 +1210,8 @@ topics:
     nightlyBigShare: 0.01
     nightlySameMemory: 0.95
     nightlyVerifyTokensPerPair: 25
+    authorTokensPerTopic: 60
+    authorTokensPerGroup: 20
     nightlyTopicExamples: 4
     verifyTopicExamples: 3
     verifyGroupExamples: 5

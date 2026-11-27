@@ -5,10 +5,12 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.google.common.hash.Hashing;
 import lombok.Builder;
 import lombok.NonNull;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /** A successful item's response: decide or generate, told apart by the shape of {@code result}. */
@@ -44,6 +46,14 @@ public sealed interface ItemResponse {
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     record GenerateResult(JsonNode output) {
+
+        /** The output's size and SHA-256, never its text: it is the model's answer, made from users' traces. */
+        @Override
+        public String toString() {
+            var text = output == null ? "null" : output.toString();
+            return "GenerateResult[output chars '%d', sha256 '%s']".formatted(text.length(),
+                    Hashing.sha256().hashString(text, StandardCharsets.UTF_8));
+        }
     }
 
     /**
