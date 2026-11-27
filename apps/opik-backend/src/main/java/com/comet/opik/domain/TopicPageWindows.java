@@ -18,9 +18,10 @@ import java.util.stream.Stream;
  *
  * <p>Exact: a span is the list's range with a later lower bound, as a later {@code from_time} would give. In the
  * default order, newest trace id first, a span's traces are the newest of the range, so a span read that fills the
- * page has the page of the whole range. A read that does not fill it is dropped and the next, 8 times longer span is
- * read; after {@link #MAX_SPANS} spans, or once a span reaches the range's own lower bound, the whole range is read,
- * as without spans.
+ * page has the page of the whole range. A read that does not fill it is dropped and the next span, {@code spanGrowth}
+ * times longer, is read; after {@code maxSpans} spans, or once a span reaches the range's own lower bound, the whole
+ * range is read, as without spans. Every span read costs about the fixed part of a whole-range read, so a topic the
+ * spans miss (sparse, or only in old traces) pays one such read per span: {@code maxSpans} bounds that.
  *
  * <p>Only for the default order, with a topic filter and its {@code topics.filter.firstPageWindow} above zero, and
  * when the list's count holds the page: a page past the count is the list's tail, which only the whole range reads.
@@ -29,9 +30,6 @@ import java.util.stream.Stream;
  */
 @UtilityClass
 class TopicPageWindows {
-
-    static final int GROWTH = 8;
-    static final int MAX_SPANS = 4;
 
     /** The spans' lower bounds, newest first; empty when the page reads its whole range at once. */
     static List<Instant> lowerBounds(@NonNull TraceSearchCriteria criteria, int size, int page, long total,
@@ -56,14 +54,14 @@ class TopicPageWindows {
             var even = Duration.ofSeconds((long) Math.ceil(Duration.between(floor, upper).toSeconds() * share));
             span = even.compareTo(span) > 0 ? even : span;
         }
-        var bounds = new ArrayList<Instant>(MAX_SPANS);
-        while (bounds.size() < MAX_SPANS) {
+        var bounds = new ArrayList<Instant>(scope.maxSpans());
+        while (bounds.size() < scope.maxSpans()) {
             var lower = upper.minus(span);
             if (floor != null && !lower.isAfter(floor)) {
                 break;
             }
             bounds.add(lower);
-            span = span.multipliedBy(GROWTH);
+            span = span.multipliedBy(scope.spanGrowth());
         }
         return bounds;
     }

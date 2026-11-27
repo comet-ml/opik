@@ -2960,6 +2960,10 @@ topics:
     #  Description: Added to a run's longest trace_topics insert (every attempt and backoff) in its deadline. At most
     #  10m
     insertSlack: ${TOPICS_RUN_INSERT_SLACK:-30s}
+    #  Default: 1000
+    #  Description: Trace ids per read of the check that deletes the trace_topics rows of traces deleted while a run or
+    #  its labelling pass ran. The ids go into the query text, which ClickHouse's max_query_size bounds. From 1 to 5000
+    deletedCheckBatchSize: ${TOPICS_RUN_DELETED_CHECK_BATCH_SIZE:-1000}
     #  The ClickHouse guards of the run's reads (window count, window read, unlabelled read, topic counts), apart
     #  from the vectors tick's: the run reads a whole window, the window read about three times
     read:
@@ -3095,8 +3099,16 @@ topics:
     maxMemoryUsage: ${TOPICS_FILTER_MAX_MEMORY_USAGE:-4294967296}
     #  Default: 1h
     #  Description: The trace list filtered by topic, in its default order, first reads the newest traces of this span,
-    #  then of spans 8 times longer, until a read fills the page; then the whole range. 0s reads the whole range at once
+    #  then of longer spans (spanGrowth, maxSpans), until a read fills the page; then the whole range. 0s reads the
+    #  whole range at once
     firstPageWindow: ${TOPICS_FILTER_FIRST_PAGE_WINDOW:-1h}
+    #  Default: 1
+    #  Description: Span reads at most before the whole range. Each span read costs about the fixed part of a whole
+    #  range read, so a topic the spans miss (sparse, or only in old traces) pays one such read per span. From 1 to 4
+    maxSpans: ${TOPICS_FILTER_MAX_SPANS:-1}
+    #  Default: 8
+    #  Description: Each span after the first is this many times longer than the one before. From 2 to 64
+    spanGrowth: ${TOPICS_FILTER_SPAN_GROWTH:-8}
   #  The ClickHouse guards of the read API's reads (counts per topic and day, the collecting count), apart from the
   #  run's: a page request, not a background job. A rows, bytes or memory trip answers status too_large; a time
   #  trip or a spent budget answers 503 with Retry-After
@@ -3242,12 +3254,16 @@ topics:
     find:
       #  Default: 30000000
       #  Description: Per window read. A fresh read over it is read again over the older half of its status
-      #  span, down to 1 minute; other reads fail for the tick. At most 1000000000
+      #  span, down to minNarrowedSpan; other reads fail for the tick. At most 1000000000
       maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
       #  Default: 1073741824 (1 GiB)
       #  Description: Per window read. A fresh read over it is read again over the older half of its status
-      #  span, down to 1 minute; other reads fail for the tick. At most 8589934592 (8 GiB)
+      #  span, down to minNarrowedSpan; other reads fail for the tick. At most 8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
+      #  Default: 1m
+      #  Description: The shortest status span a fresh read over a find guard is narrowed to; a read still over the
+      #  guard at this span fails for the tick. From 1s to 1h
+      minNarrowedSpan: ${TOPICS_VECTORS_FIND_MIN_NARROWED_SPAN:-1m}
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Adds to the leader lock's lease. At most
       #  tickBudget

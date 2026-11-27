@@ -72,9 +72,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicVectorsTickService {
 
-    /** The shortest status span a fresh read over its guard is narrowed to; one still over it fails as before. */
-    static final Duration MIN_NARROWED_SPAN = Duration.ofMinutes(1);
-
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig;
     private final @NonNull TopicWorkspaceService workspaces;
@@ -276,7 +273,7 @@ public class TopicVectorsTickService {
     /**
      * The workspace's window read. A fresh read over a find size guard would fail the same way on every tick and keep
      * its watermark, so it is read again as of the middle of its status span ({@link #narrowed}), halving until one fits
-     * or the span is under {@link #MIN_NARROWED_SPAN}. The watermark then moves to that bound, and the next tick reads
+     * or the span is under {@code topics.vectors.find.minNarrowedSpan}. The watermark then moves to that bound, and the next tick reads
      * from there. The daily pass is read in slices already and keeps its watermark, so it fails as it is.
      */
     private Mono<FoundRead> read(TopicVectorsMetrics.Workspace workspace, TopicVectorsFind find, boolean longWindow,
@@ -286,7 +283,9 @@ public class TopicVectorsTickService {
                 budget, vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
                 .map(read -> FoundRead.builder().find(find).read(read).build())
                 .onErrorResume(exception -> {
-                    var narrowed = longWindow ? null : narrowed(find);
+                    var narrowed = longWindow
+                            ? null
+                            : narrowed(find, vectors.getFind().getMinNarrowedSpan().toJavaDuration());
                     if (narrowed == null || !TopicsReadErrors.isTooLarge(exception)) {
                         return Mono.error(exception);
                     }
@@ -297,10 +296,10 @@ public class TopicVectorsTickService {
                 });
     }
 
-    /** The find as of the middle of its status span; null when that half is under {@link #MIN_NARROWED_SPAN}. */
-    static @Nullable TopicVectorsFind narrowed(@NonNull TopicVectorsFind find) {
+    /** The find as of the middle of its status span; null when that half is under {@code minSpan}. */
+    static @Nullable TopicVectorsFind narrowed(@NonNull TopicVectorsFind find, @NonNull Duration minSpan) {
         var half = Duration.between(find.lowerBound(), find.upperBound()).dividedBy(2);
-        return half.compareTo(MIN_NARROWED_SPAN) < 0
+        return half.compareTo(minSpan) < 0
                 ? null
                 : find.toBuilder().upperBound(find.lowerBound().plus(half)).asOf(true).build();
     }

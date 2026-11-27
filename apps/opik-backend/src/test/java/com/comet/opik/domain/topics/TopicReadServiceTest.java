@@ -306,6 +306,8 @@ class TopicReadServiceTest {
                 .maxExecutionSeconds(30L)
                 .maxMemoryUsage(4L * 1024 * 1024 * 1024)
                 .firstPageWindow(Duration.ofHours(1))
+                .maxSpans(1)
+                .spanGrowth(8)
                 .build());
         // No project row read: the filter needs only the live topics.
         verify(projectDAO, never()).findProjects(any(), any());

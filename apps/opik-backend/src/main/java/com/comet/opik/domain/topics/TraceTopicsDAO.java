@@ -125,8 +125,6 @@ public class TraceTopicsDAO {
                 max_rows_to_read = <max_rows_to_read>, log_comment = '<log_comment>'
             """;
 
-    /** Trace ids per check: a bound array goes into the query text, which ClickHouse's max_query_size bounds. */
-    private static final int CHECK_BATCH_SIZE = 1_000;
     private static final String DELETE_USER = "topics";
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -160,7 +158,8 @@ public class TraceTopicsDAO {
      * before the insert, so nothing else would delete them. The cascade deletes {@code topic_vectors} before
      * {@code trace_topics}, so a trace whose vectors are gone here has had its cascade, or its {@code trace_topics} step
      * is still to come and deletes these rows too; a cascade that starts after this check deletes them then. Returns
-     * how many traces had their rows deleted. The check reads under the {@code topics.run.read} guards.
+     * how many traces had their rows deleted. The check reads {@code topics.run.deletedCheckBatchSize} ids at a time,
+     * under the {@code topics.run.read} guards.
      */
     public Mono<Integer> deleteRowsOfDeletedTraces(@NonNull List<TraceTopic> rows) {
         var traces = rows.stream().collect(Collectors.groupingBy(TraceTopic::workspaceId,
@@ -169,7 +168,7 @@ public class TraceTopicsDAO {
         return Flux.fromIterable(traces.entrySet())
                 .concatMap(workspace -> Flux.fromIterable(workspace.getValue().entrySet())
                         .concatMap(project -> Flux.fromIterable(Lists.partition(List.copyOf(project.getValue()),
-                                CHECK_BATCH_SIZE))
+                                config.getRun().getDeletedCheckBatchSize()))
                                 .concatMap(batch -> findVectoredTraces(workspace.getKey(), project.getKey(), batch)
                                         .map(vectored -> batch.stream().filter(id -> !vectored.contains(id))
                                                 .collect(Collectors.toUnmodifiableSet())))

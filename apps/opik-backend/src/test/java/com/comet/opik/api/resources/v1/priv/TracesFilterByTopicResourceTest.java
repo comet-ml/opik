@@ -513,31 +513,38 @@ class TracesFilterByTopicResourceTest {
         cases.add(Map.entry(List.of(firstTopic), fromTime));
         cases.add(Map.entry(List.of(firstTopic, sdk), Map.of()));
         var spans = opikConfig.getTopics().getFilter().getFirstPageWindow();
-        for (var listCase : cases) {
-            for (int size : List.of(1, 6)) {
-                // Size 1 up to page 5 only: the first span holds them; size 6 crosses every span and the tail.
-                for (int page = 1; page <= (size == 1 ? 5 : 120 / size + 1); page++) {
-                    var params = new HashMap<>(listCase.getValue());
-                    params.put("page", String.valueOf(page));
-                    var inSpans = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
-                            listCase.getKey(), List.of(), size, params);
-                    opikConfig.getTopics().getFilter().setFirstPageWindow(io.dropwizard.util.Duration.seconds(0));
-                    try {
-                        var whole = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
+        int maxSpans = opikConfig.getTopics().getFilter().getMaxSpans();
+        // Every span the setting allows: pages that only a later span fills are compared too.
+        opikConfig.getTopics().getFilter().setMaxSpans(4);
+        try {
+            for (var listCase : cases) {
+                for (int size : List.of(1, 6)) {
+                    // Size 1 up to page 5 only: the first span holds them; size 6 crosses every span and the tail.
+                    for (int page = 1; page <= (size == 1 ? 5 : 120 / size + 1); page++) {
+                        var params = new HashMap<>(listCase.getValue());
+                        params.put("page", String.valueOf(page));
+                        var inSpans = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
                                 listCase.getKey(), List.of(), size, params);
-                        assertThat(inSpans).as("%s, size %d, page %d", listCase, size, page).isEqualTo(whole);
-                        if (whole.content().isEmpty()) {
-                            break;
+                        opikConfig.getTopics().getFilter().setFirstPageWindow(io.dropwizard.util.Duration.seconds(0));
+                        try {
+                            var whole = traceClient.getTraces(null, projectId, caller.apiKey(), caller.workspaceName(),
+                                    listCase.getKey(), List.of(), size, params);
+                            assertThat(inSpans).as("%s, size %d, page %d", listCase, size, page).isEqualTo(whole);
+                            if (whole.content().isEmpty()) {
+                                break;
+                            }
+                        } finally {
+                            opikConfig.getTopics().getFilter().setFirstPageWindow(spans);
                         }
-                    } finally {
-                        opikConfig.getTopics().getFilter().setFirstPageWindow(spans);
                     }
                 }
+                if (listCase == cases.getFirst()) {
+                    // The spans were read: with no from_time, only a span read has a lower bound in its log comment.
+                    assertThat(spanReads(projectId)).isPositive();
+                }
             }
-            if (listCase == cases.getFirst()) {
-                // The spans were read: with no from_time, only a span read has a lower bound in its log comment.
-                assertThat(spanReads(projectId)).isPositive();
-            }
+        } finally {
+            opikConfig.getTopics().getFilter().setMaxSpans(maxSpans);
         }
     }
 

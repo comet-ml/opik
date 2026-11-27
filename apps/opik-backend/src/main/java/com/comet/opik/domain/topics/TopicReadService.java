@@ -165,6 +165,8 @@ public class TopicReadService {
                 .maxExecutionSeconds(config.getFilter().getMaxExecutionTime().toSeconds())
                 .maxMemoryUsage(config.getFilter().getMaxMemoryUsage())
                 .firstPageWindow(config.getFilter().getFirstPageWindow().toJavaDuration())
+                .maxSpans(config.getFilter().getMaxSpans())
+                .spanGrowth(config.getFilter().getSpanGrowth())
                 .build());
     }
 

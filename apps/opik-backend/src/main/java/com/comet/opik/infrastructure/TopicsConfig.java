@@ -332,6 +332,13 @@ public class TopicsConfig {
         @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
         private Duration insertBackoff;
 
+        /**
+         * Trace ids per read of the check that deletes the {@code trace_topics} rows of traces deleted while a run or
+         * its labelling pass ran; the ids go into the query text, which {@code max_query_size} bounds.
+         */
+        @JsonProperty
+        @Min(1) @Max(5_000) private int deletedCheckBatchSize;
+
         /** Added to a run's longest insert (every attempt, every backoff) in its deadline, for the steps around it. */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
@@ -489,13 +496,21 @@ public class TopicsConfig {
 
         /**
          * The trace list filtered by topic, in its default order, first reads the newest traces of this span, then of
-         * spans 8 times longer, until a read fills the page; then the whole range. Each read reads only its span of
-         * {@code trace_topics} and {@code traces}. Zero reads the whole range at once.
+         * longer spans ({@link #spanGrowth}, {@link #maxSpans}), until a read fills the page; then the whole range.
+         * Each read reads only its span of {@code trace_topics} and {@code traces}. Zero reads the whole range at once.
          */
         @NotNull @JsonProperty
         @MinDuration(value = 0, unit = TimeUnit.SECONDS)
         @MaxDuration(value = 30, unit = TimeUnit.DAYS)
         private Duration firstPageWindow;
+
+        /** Span reads at most before the whole range; each costs about the fixed part of a whole-range read. */
+        @JsonProperty
+        @Min(1) @Max(4) private int maxSpans;
+
+        /** Each span after the first is this many times longer than the one before. */
+        @JsonProperty
+        @Min(2) @Max(64) private int spanGrowth;
 
         @JsonIgnore
         @AssertTrue(message = "topics.filter.maxExecutionTime must be whole seconds") public boolean isMaxExecutionTimeWholeSeconds() {
@@ -914,6 +929,12 @@ public class TopicsConfig {
 
         @JsonProperty
         @Min(1) @Max(8L * 1024 * 1024 * 1024) private long maxMemoryUsage;
+
+        /** The shortest status span a fresh read over a find guard is narrowed to; one still over it fails. */
+        @NotNull @JsonProperty
+        @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+        private Duration minNarrowedSpan;
 
         /** ClickHouse threads per read, so the tick stays a small share of the server. */
         @JsonProperty
