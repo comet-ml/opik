@@ -17,3 +17,8 @@ export function makeSdkClient(env: EnvConfig): SdkClient {
 export { PythonSdkBridgeError } from './python-sdk-client';
 export type { PythonSdkClient, TypescriptSdk };
 export type { SpanSeedUsage, TypedValueSpec, StreamReadShape } from './python-sdk-client';
+export type {
+  MixedScoreKind,
+  MixedScoreResult,
+  MixedScoreEvaluateResult,
+} from './python-sdk-client';

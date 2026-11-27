@@ -96,6 +96,19 @@ export class TestSuiteItemsPage {
     return this.itemsTableBody.locator('tr[data-row-id]').nth(index);
   }
 
+  /**
+   * One item's "Pass criteria" cell, as `SuiteItemExecutionPolicyCell` renders
+   * it — either the item's own policy or, in a muted style, the suite's.
+   *
+   * Addressed by `data-cell-id` (`<rowId>_<columnId>`, stamped by the shared
+   * `DataTable`) rather than by position: the items table's column order is
+   * user-configurable and persisted, so an `nth-child` would read whatever
+   * column the last person left there.
+   */
+  executionPolicyCell(itemId: string): Locator {
+    return this.itemsTableBody.locator(`[data-cell-id="${itemId}_execution_policy"]`);
+  }
+
   itemRowById(id: string): Locator {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
   }

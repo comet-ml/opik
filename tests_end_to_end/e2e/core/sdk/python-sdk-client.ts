@@ -11,6 +11,50 @@
  * under the `original_usage.` prefix. A seed that must arrive with the bare key
  * cannot go through the bridge at all — see `backendClient.createSpan`.
  */
+/**
+ * The value kinds `mixedScoreEvaluate`'s metric can return, as
+ * `MIXED_SCORE_KINDS` in the bridge names them.
+ *
+ * `finite` is the control: without a score the engine must LEAVE ALONE, a
+ * build that failed every score indiscriminately would satisfy every
+ * assertion about the other five.
+ */
+export type MixedScoreKind = 'finite' | 'nan' | 'pos_inf' | 'neg_inf' | 'none' | 'long_string';
+
+/** One score as the engine recorded it, after the non-finite rewrite. */
+export interface MixedScoreResult {
+  dataset_item_id: string;
+  key: string;
+  value_kind: MixedScoreKind | '';
+  /** `0.0` for every failed score. */
+  score_value: number;
+  scoring_failed: boolean;
+  /** The engine's replacement reason, or the metric's own for a score it kept. */
+  reason: string | null;
+  /**
+   * `metadata.original_value` — a capped `repr()` of what the metric returned.
+   *
+   * `null` for an ABSENT key rather than `''`, so "the engine recorded nothing
+   * here" cannot satisfy a comparison against a recorded value.
+   */
+  original_value: string | null;
+  /** `metadata.original_reason` — the metric's own reason, moved aside. */
+  original_reason: string | null;
+}
+
+export interface MixedScoreEvaluateResult {
+  experiment_id: string;
+  experiment_name: string;
+  dataset_id: string;
+  item_count: number;
+  results: MixedScoreResult[];
+  /** Null when every score failed and the statistics dropped the metric. */
+  aggregate_mean: number | null;
+  aggregate_failed_count: number | null;
+  /** The values that formed the mean, so a caller can assert the denominator. */
+  aggregate_values: number[];
+}
+
 export type SpanSeedUsage = {
   prompt_tokens: number;
   completion_tokens: number;
@@ -150,6 +194,30 @@ export interface PythonSdkClient {
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
   /**
+   * One `Dataset` object driven through an insert that ABORTS part-way and then
+   * a retry of the same items — opik#9393's failure path.
+   *
+   * Neither `insertDatasetItems` nor `insertDatasetItemsSession` can express
+   * it: both feed `Dataset.insert` a list that always finishes, so the funnel
+   * always completes and the stale-cache state is unreachable. Here the bridge
+   * feeds the items as a generator that raises after yielding them all, keeps
+   * the object, and reports the item counts it read between the steps —
+   * observations the caller cannot make for itself, since the whole sequence
+   * has to happen inside one request.
+   */
+  insertDatasetItemsRetryAfterFailedFunnel(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{
+    dataset_id: string;
+    aborted_insert_error: string;
+    items_after_aborted_insert: number;
+    items_after_retry: number;
+    items_after_repeat: number;
+  }>;
+  /**
    * One `Dataset.insert([item])` whose content carries non-JSON-native Python
    * types — a `uuid.UUID`, an `enum.Enum` member, a tz-aware `datetime`, a
    * `set`, a `tuple`.
@@ -277,6 +345,34 @@ export interface PythonSdkClient {
    * applied" (languages stop differing) apart from "the lock stopped holding"
    * (a language differs from its own sequential score).
    */
+  /**
+   * One `evaluate()` run whose single metric returns a different kind of value
+   * per item — finite, NaN, +-inf, None, an over-long string.
+   *
+   * The shape opik#9396 changed: a value that is not a finite real number is
+   * now turned into a FAILED score rather than reaching the feedback batch.
+   * Everything a caller needs to assert that comes back as data — the
+   * per-score `scoring_failed`, the engine's replacement reason, the relocated
+   * `original_reason`, the capped `original_value` — plus the console's own
+   * mean and failed count, read off the statistics the report prints rather
+   * than recomputed.
+   *
+   * `aggregate_mean` is null when every score failed: there is then no
+   * denominator, and the statistics drop the metric entirely rather than
+   * reporting a mean of nothing.
+   */
+  mixedScoreEvaluate(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    metric_name: string;
+    reason: string;
+    items: Array<{ key: string; value_kind: MixedScoreKind }>;
+    long_string_length?: number;
+    task_threads?: number;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<MixedScoreEvaluateResult>;
   readabilityEvaluate(args: {
     project_name: string;
     dataset_name: string;
@@ -360,6 +456,45 @@ export interface PythonSdkClient {
       trace_id: string;
       idx: number | null;
     }>;
+  }>;
+  /**
+   * `ExperimentsClient.find_experiment_items_for_dataset` — a DATASET-wide
+   * experiment-item read, and a different method from `readExperimentItems`
+   * above (`Experiment.get_items()`, one experiment, a different endpoint).
+   *
+   * `experiment_ids` is the discriminator rather than a filter: omit it and the
+   * SDK resolves the dataset's own regular experiments and reads them through
+   * the cursor stream opik#9588 added, grouped by dataset item; supply it and
+   * the pre-existing paged read runs. The field is therefore optional here so a
+   * caller can express "omitted", which is the arm under test.
+   *
+   * `error_type` carries the exception's class name when the call was REFUSED
+   * — `experiment_ids` together with `dataset_versions` raises `ValueError`,
+   * and an unknown version raises `DatasetVersionNotFound`. Both are documented
+   * behaviours, so they come back as values to assert on rather than as a 500.
+   */
+  readDatasetExperimentItems(args: {
+    dataset_name: string;
+    project_name?: string;
+    experiment_ids?: string[];
+    dataset_versions?: string[];
+    filter_string?: string;
+    max_results?: number;
+    page_size?: number;
+    num_threads?: number;
+    truncate?: boolean;
+    workspace?: string;
+  }): Promise<{
+    count: number;
+    items: Array<{
+      id: string;
+      dataset_item_id: string;
+      trace_id: string;
+      experiment_id: string | null;
+      dataset_item_input: string | null;
+    }>;
+    error_type: string | null;
+    error_message: string | null;
   }>;
   /**
    * `cancel_experiments(ids=[...])`, one of the bindings opik#9211 regenerated.
@@ -656,6 +791,38 @@ export interface PythonSdkClient {
       caught: string | null;
     }>;
   }>;
+  /**
+   * Log one `@opik.track`ed trace whose input, output and metadata carry numpy
+   * scalars, and a second built from the equivalent plain Python values.
+   *
+   * The payload is built inside the bridge rather than passed in, and it has to
+   * be: a numpy scalar has no JSON spelling, so a value sent through this
+   * request body would already have been converted by the time the SDK saw it —
+   * which is the conversion under test. See `routes/numpy_payloads.py`.
+   *
+   * Both traces go into one project in one request, so the project holds
+   * exactly these two rows and a filtered read over it can be asserted by
+   * exhaustion rather than by the caller finding its own row.
+   */
+  numpyPayloadTraces(args: {
+    project_name: string;
+    numpy_trace_name: string;
+    control_trace_name: string;
+    workspace?: string;
+  }): Promise<{
+    numpy_trace_id: string;
+    control_trace_id: string;
+    /**
+     * The control payload as the plain-Python dict the bridge built it from —
+     * what `jsonable_encoder.encode` must produce for the numpy payload too.
+     * The caller is expected to compare it to its own literal rather than take
+     * it on trust, so a change on the bridge side fails loudly instead of
+     * quietly redefining the expectation.
+     */
+    expected: Record<string, unknown>;
+    /** Diagnostic only — nothing asserts a numpy version. */
+    numpy_version: string;
+  }>;
 }
 
 export class PythonSdkBridgeError extends Error {
@@ -819,6 +986,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         { timeoutMs: 180_000 },
       );
     },
+    async insertDatasetItemsRetryAfterFailedFunnel(args) {
+      // Three inserts and three reads back to back in one request, so the same
+      // budget as the other session route.
+      return request<{
+        dataset_id: string;
+        aborted_insert_error: string;
+        items_after_aborted_insert: number;
+        items_after_retry: number;
+        items_after_repeat: number;
+      }>('POST', '/datasets/insert-retry-after-failed-funnel', args, { timeoutMs: 180_000 });
+    },
     async insertTypedDatasetItem(args) {
       // One item, but the same cloud rate-limiting exposure as the other insert
       // routes — and an abort here would leave the dataset half-written, which
@@ -867,6 +1045,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async mixedScoreEvaluate(args) {
+      return request<MixedScoreEvaluateResult>(
+        'POST',
+        '/experiments/mixed-score-evaluate',
+        args,
+        {
+          // One evaluate() over a handful of items, all local computation —
+          // but behind a dataset create and an experiment write against a
+          // cloud backend, same as readabilityEvaluate.
+          timeoutMs: 120_000,
+        },
+      );
     },
     async readabilityEvaluate(args) {
       return request<{
@@ -926,6 +1117,25 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
         // A full read of a multi-page experiment against a cloud backend is
         // several round trips deep, and the sequential arms (num_threads=1 at
         // a small page size) are deliberately the slowest way to do it.
+        timeoutMs: 300_000,
+      });
+    },
+    async readDatasetExperimentItems(args) {
+      return request<{
+        count: number;
+        items: Array<{
+          id: string;
+          dataset_item_id: string;
+          trace_id: string;
+          experiment_id: string | null;
+          dataset_item_input: string | null;
+        }>;
+        error_type: string | null;
+        error_message: string | null;
+      }>('POST', '/experiments/read-dataset-items', args, {
+        // The no-`experiment_ids` arm drains a server-side cursor experiment by
+        // experiment, so one call here is as many round trips as the dataset has
+        // pages — past the default on a cloud backend under a rate limit.
         timeoutMs: 300_000,
       });
     },
@@ -1062,6 +1272,18 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           caught: string | null;
         }>;
       }>('POST', '/traces/track-generator', args, { timeoutMs: 150_000 });
+    },
+    async numpyPayloadTraces(args) {
+      // One request logs both traces, flushes once and reads both back by id
+      // before answering, so the budget has to cover the upload — which is
+      // rate-limited on a shared cloud workspace, where a 429 makes the SDK
+      // back off for up to a minute.
+      return request<{
+        numpy_trace_id: string;
+        control_trace_id: string;
+        expected: Record<string, unknown>;
+        numpy_version: string;
+      }>('POST', '/traces/numpy-payload', args, { timeoutMs: 150_000 });
     },
   };
 }

@@ -281,6 +281,57 @@ class DatasetInsertItemsSessionResponse(BaseModel):
     inserted: list[int]
 
 
+class DatasetInsertRetryAfterFailureRequest(BaseModel):
+    """One `Dataset` object driven through an ABORTED insert and then a retry.
+
+    The whole sequence has to live in one request for the same reason
+    `/datasets/insert-items-session` exists — the bridge builds a fresh client
+    per call, and the defect under test (opik#9393) is only reachable on an
+    object whose local hash cache survived a failed insert. Across two HTTP
+    calls the retry would re-sync no matter what the first insert did, and the
+    test could not fail.
+
+    The intermediate item counts are reported back rather than left for the
+    caller to read, because the caller cannot observe the moment between the
+    two inserts at all. They are read through a SEPARATE `get_dataset()` so the
+    subject object's cache is not touched by the reading.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str
+    # Fed to the aborted insert as a generator that yields all of them and then
+    # raises, and then handed to the retry as a plain list. Small on purpose:
+    # the SDK batches at 1000 items, so a count below that means the aborted
+    # insert never flushes and nothing it hashed reaches the backend — which is
+    # the state a retry has to recover from.
+    items: list[dict[str, Any]]
+    workspace: str | None = None
+
+
+class DatasetInsertRetryAfterFailureResponse(BaseModel):
+    dataset_id: str
+    # str() of the exception the aborted insert raised. The route fails with a
+    # 500 if it raised nothing, rather than reporting None: an insert that
+    # completed means the seed never reached the state under test, and every
+    # count below would then be asserted against the wrong scenario.
+    aborted_insert_error: str
+    # Items the backend holds after the aborted insert. Expected to be zero —
+    # the generator raises before the first batch is flushed — and read rather
+    # than assumed, because "the retry stored everything" is only the fix if
+    # the items were genuinely missing beforehand.
+    items_after_aborted_insert: int
+    # Items the backend holds after re-inserting the SAME items on the SAME
+    # object with deduplication left at its default. This is the number the fix
+    # changes: without the cache invalidation the retry skips every item as a
+    # duplicate and this stays at items_after_aborted_insert.
+    items_after_retry: int
+    # Items after a THIRD insert of the same items, so the caller can assert the
+    # invalidation did not simply disable deduplication from then on.
+    items_after_repeat: int
+
+
 class DatasetReadItemsRequest(BaseModel):
     """One `Dataset.get_items(...)` call, with its read knobs exposed verbatim.
 
@@ -487,6 +538,78 @@ class ExperimentReadItemsResponse(BaseModel):
     experiment_id: str
     count: int
     items: list[ExperimentItemFingerprint]
+
+
+class DatasetExperimentItemsReadRequest(BaseModel):
+    """One `ExperimentsClient.find_experiment_items_for_dataset` call.
+
+    Every knob is `None` by default and only forwarded when set, for the reason
+    `ExperimentReadItemsRequest` gives: the behaviour under test is what the
+    method does when `experiment_ids` is OMITTED, and a route that sent an
+    explicit `None` through a different code path — or a hardcoded copy of a
+    default — would be testing itself.
+
+    `experiment_ids` is therefore the discriminator between the two reads this
+    one method dispatches over, not merely an optional filter: omitted it takes
+    the cursor stream opik#9588 added, supplied it takes the pre-existing paged
+    read.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_name: str
+    project_name: str | None = None
+    experiment_ids: list[str] | None = None
+    dataset_versions: list[str] | None = None
+    filter_string: str | None = None
+    max_results: int | None = None
+    page_size: int | None = None
+    num_threads: int | None = None
+    truncate: bool | None = None
+    workspace: str | None = None
+
+
+class DatasetExperimentItemResult(BaseModel):
+    """One `ExperimentItemContent` from the dataset-wide read.
+
+    `experiment_id` is `| None` because the dataclass declares it so, and that
+    optionality is the whole point of the no-`experiment_ids` read: the caller
+    never named the experiments, so the only thing that says which experiment a
+    result belongs to is this field. Defaulting it to anything here would make a
+    build that stopped populating it read as correct.
+
+    `dataset_item_input` is the seeded item's own `input`, lifted out of
+    `dataset_item_data` so a caller can tell WHICH item a result is about
+    without transferring the whole record. `None` when the key is absent, never
+    `""`: an empty `dataset_item_data` is how a broken join would present, and a
+    blank string would make it indistinguishable from an item seeded with one.
+    """
+
+    id: str
+    dataset_item_id: str
+    trace_id: str
+    experiment_id: str | None
+    dataset_item_input: str | None
+
+
+class DatasetExperimentItemsReadResponse(BaseModel):
+    """What the read returned, or the exception it refused with.
+
+    Both in one shape because one of the method's documented behaviours IS a
+    refusal — `experiment_ids` together with `dataset_versions` raises
+    `ValueError` — and a route that let that escape as a 500 would make the
+    caller assert on an HTTP error body instead of on the exception the SDK
+    promises.
+
+    `error_type` is the exception's class name rather than a boolean, so the
+    caller pins WHICH error it got: a `ValueError` and a `DatasetVersionNotFound`
+    are different claims, and only the name separates them.
+    """
+
+    count: int
+    items: list[DatasetExperimentItemResult]
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 class ExperimentItemScore(BaseModel):
@@ -1058,3 +1181,102 @@ class TrackedGeneratorResult(BaseModel):
 
 class TrackedGeneratorResponse(BaseModel):
     calls: list[TrackedGeneratorResult]
+
+
+class MixedScoreItemSeed(BaseModel):
+    """One dataset item, naming the value kind its metric should return.
+
+    The KIND rather than the value itself: NaN and infinity are not valid JSON,
+    so a caller cannot send them over this bridge at all. Naming them is also
+    what makes the seed readable in a failure message — "the item whose metric
+    returned nan" beats an item that looks identical to its neighbours.
+    """
+
+    key: str
+    #: One of `MIXED_SCORE_KINDS` in routes/experiments.py.
+    value_kind: str
+
+
+class MixedScoreEvaluateRequest(BaseModel):
+    workspace: str | None = None
+    project_name: str
+    dataset_name: str
+    dataset_description: str | None = None
+    experiment_name: str
+    metric_name: str
+    items: list[MixedScoreItemSeed]
+    #: The reason the metric attaches to every score it returns. Asserted to
+    #: survive onto `metadata.original_reason` for the ones that are failed.
+    reason: str
+    #: Length of the string the `long_string` kind returns. The caller picks it
+    #: so the 200-character `reprlib` cap is asserted against a value the test
+    #: chose rather than one this file fixed.
+    long_string_length: int = 260
+    task_threads: int = 1
+
+
+class MixedScoreResult(BaseModel):
+    dataset_item_id: str
+    key: str
+    value_kind: str
+    #: What the engine recorded. `0.0` for every failed score.
+    score_value: float
+    scoring_failed: bool
+    #: The engine's own replacement reason, or the metric's for a score it left
+    #: alone.
+    reason: str | None = None
+    #: `metadata.original_value` — a `repr()` of what the metric returned,
+    #: capped at 200 characters. Null when the key is absent, never defaulted
+    #: to the empty string: "the engine recorded nothing here" and "it recorded
+    #: an empty repr" are different facts.
+    original_value: str | None = None
+    #: `metadata.original_reason` — the metric's own reason, moved aside.
+    original_reason: str | None = None
+
+
+class MixedScoreEvaluateResponse(BaseModel):
+    experiment_id: str
+    experiment_name: str
+    dataset_id: str
+    item_count: int
+    results: list[MixedScoreResult]
+    #: The mean the console prints, or null when every score failed and there
+    #: was no denominator — `calculate_aggregated_statistics` drops such a
+    #: metric from its dictionary entirely.
+    aggregate_mean: float | None = None
+    #: `ScoreStatistics.failed_count` — how many of this metric's scores were
+    #: left out of the mean.
+    aggregate_failed_count: int | None = None
+    #: The values that DID make it into the mean, so a caller can assert the
+    #: denominator rather than inferring it.
+    aggregate_values: list[float] = []
+
+
+class NumpyPayloadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    #: The two traces' names, supplied by the caller so each is addressable in
+    #: the UI and in a REST read without the bridge and the spec having to agree
+    #: on a naming scheme. They land in the same project on purpose: the
+    #: project then holds exactly these two rows, which is what lets a caller
+    #: assert a filtered read by EXHAUSTION rather than by finding its own row
+    #: in whatever else was there.
+    numpy_trace_name: str
+    control_trace_name: str
+    workspace: str | None = None
+
+
+class NumpyPayloadResponse(BaseModel):
+    numpy_trace_id: str
+    control_trace_id: str
+    #: The control payload as the plain-Python dict it was built from — what
+    #: `jsonable_encoder.encode` must produce for the numpy payload too. Handed
+    #: back rather than restated in the spec so the two can never drift apart
+    #: silently; the spec still holds its own literal and compares the two, so a
+    #: change on this side fails loudly instead of redefining the expectation.
+    expected: dict[str, Any]
+    #: Attached as a diagnostic, never asserted. The conversion is a property of
+    #: the encoder rather than of any numpy release, but a failure here is much
+    #: cheaper to read with the version in hand.
+    numpy_version: str

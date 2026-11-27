@@ -3,12 +3,15 @@ import atexit
 import opik
 from fastapi import APIRouter, Header
 from opik.evaluation import evaluate
-from opik.evaluation.metrics import Equals
+from opik.evaluation.metrics import Equals, base_metric, score_result
 from opik.evaluation.metrics.heuristics.readability import Readability
 
 from ..opik_factory import make_opik_client
 from ..schemas import (
     CompareExperimentResult,
+    DatasetExperimentItemResult,
+    DatasetExperimentItemsReadRequest,
+    DatasetExperimentItemsReadResponse,
     ExperimentCancelRequest,
     ExperimentCancelResponse,
     ExperimentCompareSeedRequest,
@@ -21,6 +24,9 @@ from ..schemas import (
     ExperimentLifecycleResponse,
     ExperimentReadItemsRequest,
     ExperimentReadItemsResponse,
+    MixedScoreEvaluateRequest,
+    MixedScoreEvaluateResponse,
+    MixedScoreResult,
     ReadabilityEvaluateRequest,
     ReadabilityEvaluateResponse,
     ReadabilityLocaleScore,
@@ -177,6 +183,107 @@ def read_experiment_items(
         count=len(fingerprints),
         items=fingerprints,
     )
+
+
+@router.post(
+    "/read-dataset-items",
+    response_model=DatasetExperimentItemsReadResponse,
+    status_code=200,
+)
+def read_dataset_experiment_items(
+    body: DatasetExperimentItemsReadRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> DatasetExperimentItemsReadResponse:
+    """`ExperimentsClient.find_experiment_items_for_dataset`, both of its arms.
+
+    The no-`experiment_ids` arm is what opik#9588 (OPIK-9047) added: the SDK
+    resolves the dataset's own regular experiments server-side and reads them
+    through the new experiment-item cursor stream, grouped by dataset item.
+    Nothing in the estate drove this method at all before this route —
+    `/experiments/read-items` is `Experiment.get_items()`, a single experiment
+    through a different endpoint.
+
+    Reached through the public `Opik.get_experiments_client()`, not by importing
+    `rest_operations`: which of the two code paths the method dispatches over is
+    part of what is under test, and calling the inner function directly would
+    choose the path for it.
+
+    Only the knobs the caller set are forwarded, so an omitted `page_size` /
+    `num_threads` / `max_results` / `truncate` exercises the SDK's own default
+    rather than a copy of it pinned here. `experiment_ids` is forwarded only
+    when present for a stronger reason: passing `experiment_ids=None`
+    explicitly and omitting the argument are the same call today, but the
+    DISPATCH is on that value, so the route sends exactly the shape a user's
+    code would.
+
+    A `ValueError` is caught and reported rather than raised, because one of the
+    documented behaviours is a refusal: `experiment_ids` together with
+    `dataset_versions`. `DatasetVersionNotFound` is caught the same way — it is
+    the SDK's own translation of the endpoint's 404, and asserting on its class
+    name is what separates it from a generic failure.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        kwargs: dict = {}
+        if body.project_name is not None:
+            kwargs["project_name"] = body.project_name
+        if body.experiment_ids is not None:
+            kwargs["experiment_ids"] = body.experiment_ids
+        if body.dataset_versions is not None:
+            kwargs["dataset_versions"] = body.dataset_versions
+        if body.filter_string is not None:
+            kwargs["filter_string"] = body.filter_string
+        if body.max_results is not None:
+            kwargs["max_results"] = body.max_results
+        if body.page_size is not None:
+            kwargs["page_size"] = body.page_size
+        if body.num_threads is not None:
+            kwargs["num_threads"] = body.num_threads
+        if body.truncate is not None:
+            kwargs["truncate"] = body.truncate
+
+        try:
+            results = client.get_experiments_client().find_experiment_items_for_dataset(
+                dataset_name=body.dataset_name, **kwargs
+            )
+        except Exception as exc:
+            # Narrowed by NAME rather than by class, so the route needs no import
+            # from the SDK's exception module to report the one failure mode the
+            # caller asserts on. Anything else is re-raised and reaches the
+            # caller as a 500, which is what an unexpected break should look
+            # like.
+            if type(exc).__name__ not in ("ValueError", "DatasetVersionNotFound"):
+                raise
+            return DatasetExperimentItemsReadResponse(
+                count=0,
+                items=[],
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    items: list[DatasetExperimentItemResult] = []
+    for result in results:
+        data = result.dataset_item_data or {}
+        raw_input = data.get("input")
+        items.append(
+            DatasetExperimentItemResult(
+                id=str(result.id),
+                dataset_item_id=str(result.dataset_item_id),
+                trace_id=str(result.trace_id),
+                # NOT `str(...)`: an absent experiment_id has to reach the caller
+                # as None so its assertion fails, rather than as the string
+                # "None", which would read as a populated field.
+                experiment_id=None
+                if result.experiment_id is None
+                else str(result.experiment_id),
+                dataset_item_input=raw_input if isinstance(raw_input, str) else None,
+            )
+        )
+
+    return DatasetExperimentItemsReadResponse(count=len(items), items=items)
 
 
 @router.post("/cancel", response_model=ExperimentCancelResponse, status_code=200)
@@ -426,4 +533,160 @@ def compare_seed(
         dataset_name=body.dataset_name,
         item_count=len(body.items),
         experiments=results,
+    )
+
+
+#: What each `value_kind` makes the metric return.
+#:
+#: Five of the six are not finite real numbers and so must be turned into failed
+#: scores by `mark_invalid_score_values_as_failed`; `finite` is the control that
+#: proves the engine is not simply failing everything. A string is in the list
+#: because `ScoreResult.value` is typed as a float but nothing enforces it, and
+#: it is the only kind whose `repr` is long enough to reach the 200-character
+#: cap.
+MIXED_SCORE_KINDS = ("finite", "nan", "pos_inf", "neg_inf", "none", "long_string")
+
+
+def _mixed_score_value(value_kind: str, long_string_length: int):
+    if value_kind == "finite":
+        return 1.0
+    if value_kind == "nan":
+        return float("nan")
+    if value_kind == "pos_inf":
+        return float("inf")
+    if value_kind == "neg_inf":
+        return float("-inf")
+    if value_kind == "none":
+        return None
+    if value_kind == "long_string":
+        # A single repeated character, so the `reprlib` truncation is readable:
+        # the result is quotes, 98 characters, "...", 99 characters.
+        return "s" * long_string_length
+    raise ValueError(f"unknown value_kind {value_kind!r}; expected one of {MIXED_SCORE_KINDS}")
+
+
+@router.post(
+    "/mixed-score-evaluate",
+    response_model=MixedScoreEvaluateResponse,
+    status_code=201,
+)
+def mixed_score_evaluate(
+    body: MixedScoreEvaluateRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> MixedScoreEvaluateResponse:
+    """Run `evaluate()` with one metric that returns a different value per item.
+
+    The shape opik#9396 changed. A metric whose value is not a finite real
+    number — NaN, +-inf, None, a string — used to reach the feedback-score batch
+    and either poison the console average or get the whole upload rejected by
+    the backend. The engine now treats such a score like a metric that RAISED:
+    `scoring_failed` set, the value replaced with `0.0`, the metric's own reason
+    moved to `metadata.original_reason`, and a capped `repr` of the original
+    under `metadata.original_value`.
+
+    One metric over one dataset in ONE run, not six runs of one value each:
+    what has to be observable is that the failed scores are excluded from the
+    average while the finite ones still form it, and a run containing only
+    invalid scores has no denominator at all (`calculate_aggregated_statistics`
+    drops the metric entirely). A per-value run could not show the mixture.
+
+    Deliberately provider-free and deterministic: the metric is a lookup on the
+    item's own `value_kind`, so there is no LLM, no network and no wall-clock
+    dependence. The task echoes the item.
+
+    `task_threads` defaults to 1 so the per-item order in the response is the
+    dataset order, which keeps a failure message pointing at the item a reader
+    can find.
+    """
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    opik.set_global_client(client, context_wise=True)
+
+    kind_by_key = {item.key: item.value_kind for item in body.items}
+
+    class MixedMetric(base_metric.BaseMetric):
+        """Returns whatever its item's `value_kind` names, with a fixed reason.
+
+        The reason is always supplied so the engine's relocation of it is
+        assertable: a failed score must carry the ENGINE's reason and keep the
+        metric's under `metadata.original_reason`, and with no reason at all
+        that key would legitimately be absent and the assertion vacuous.
+        """
+
+        def __init__(self, name: str) -> None:
+            super().__init__(name=name, track=False)
+
+        def score(self, key: str, **ignored):
+            return score_result.ScoreResult(
+                name=self.name,
+                value=_mixed_score_value(kind_by_key[key], body.long_string_length),
+                reason=body.reason,
+            )
+
+    try:
+        dataset = client.create_dataset(
+            name=body.dataset_name,
+            description=body.dataset_description,
+            project_name=body.project_name,
+        )
+        dataset.insert(
+            [
+                {"key": item.key, "input": item.key, "task_output": item.key}
+                for item in body.items
+            ]
+        )
+
+        def _task(item: dict) -> dict:
+            return {"output": item["task_output"], "key": item["key"]}
+
+        # Not wrapped in a try/except: "the run did not raise" is one of the
+        # claims, and an exception here has to reach the caller as a 500 rather
+        # than be reported as a result.
+        result = evaluate(
+            dataset=dataset,
+            task=_task,
+            scoring_metrics=[MixedMetric(name=body.metric_name)],
+            experiment_name=body.experiment_name,
+            project_name=body.project_name,
+            task_threads=body.task_threads,
+            verbose=0,
+        )
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    results: list[MixedScoreResult] = []
+    for test_result in result.test_results:
+        item_content = test_result.test_case.dataset_item_content or {}
+        key = str(item_content.get("key", ""))
+        for sr in test_result.score_results:
+            if sr.name != body.metric_name:
+                continue
+            metadata = sr.metadata or {}
+            results.append(
+                MixedScoreResult(
+                    dataset_item_id=str(test_result.test_case.dataset_item_id),
+                    key=key,
+                    value_kind=kind_by_key.get(key, ""),
+                    score_value=float(sr.value),
+                    scoring_failed=bool(sr.scoring_failed),
+                    reason=sr.reason,
+                    original_value=metadata.get("original_value"),
+                    original_reason=metadata.get("original_reason"),
+                )
+            )
+
+    # The console's own numbers, read off the same statistics the report prints
+    # rather than recomputed here — a recomputation would agree with itself
+    # however the engine had changed.
+    stats = result.aggregate_evaluation_scores().aggregated_scores.get(body.metric_name)
+
+    return MixedScoreEvaluateResponse(
+        experiment_id=str(result.experiment_id),
+        experiment_name=result.experiment_name or body.experiment_name,
+        dataset_id=str(result.dataset_id),
+        item_count=len(body.items),
+        results=results,
+        aggregate_mean=None if stats is None else float(stats.mean),
+        aggregate_failed_count=None if stats is None else int(stats.failed_count),
+        aggregate_values=[] if stats is None else [float(v) for v in stats.values],
     )

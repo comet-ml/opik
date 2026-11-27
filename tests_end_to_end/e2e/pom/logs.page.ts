@@ -3,6 +3,7 @@ import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
 import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
+import { AddToTestSuiteDialogPage } from './add-to-test-suite-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -35,6 +36,19 @@ export type LogsUrlFilter = {
   operator?: string;
   value?: string;
 };
+
+/**
+ * Which of the three Logs tabs' filter state a read is about.
+ *
+ * All three mount the same `FilterChipBar` over their own `useFilterChips`, and
+ * the two things a spec reads back are keyed by the tab in the same shape: the
+ * URL carries `<scope>_filters` and localStorage carries
+ * `chips:pinnedConfig:logs.<scope>`. Threads is in the union because the
+ * `comments` chip (opik#8724) is defined on the Threads tab as well as on
+ * Traces, and the whole point of that filter is that the two tabs answer
+ * DIFFERENT questions — so a spec about it has to be able to read either.
+ */
+export type LogsFilterScope = 'traces' | 'spans' | 'threads';
 
 // Maps an explain kind to the Traces table column id (used in data-cell-id)
 // and the owl trigger's aria-label, per apps/opik-frontend/src/plugins/comet/explain/registry.ts.
@@ -85,7 +99,7 @@ export class LogsPage {
    */
   async gotoSpans(
     projectId: string,
-    opts: { size?: number; timeRange?: string } = {},
+    opts: { size?: number; timeRange?: string; search?: string } = {},
   ): Promise<void> {
     return test.step(`Open Logs (Spans) for project ${projectId}`, async () => {
       this.projectId = projectId;
@@ -93,6 +107,11 @@ export class LogsPage {
       const params = new URLSearchParams({ logsType: 'spans' });
       if (opts.size !== undefined) params.set('size', String(opts.size));
       if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
+      // `<type>_search`, not `search`: TracesSpansTab names the param after the
+      // active tab (`useQueryParam(`${type}_search`)`), so a bare `search=` is
+      // accepted by the router, changes nothing, and leaves a spec asserting
+      // over an unfiltered table while believing it filtered.
+      if (opts.search !== undefined) params.set('spans_search', opts.search);
       await this.page.goto(
         `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
       );
@@ -180,7 +199,7 @@ export class LogsPage {
    * the filter's wire shape lives — field, type, operator and key, exactly as
    * the table will send them.
    */
-  async readUrlFilters(type: 'traces' | 'spans'): Promise<LogsUrlFilter[] | null> {
+  async readUrlFilters(type: LogsFilterScope): Promise<LogsUrlFilter[] | null> {
     return test.step(`Read the ${type} filters from the URL`, async () => {
       const raw = new URL(this.page.url()).searchParams.get(`${type}_filters`);
       if (raw === null) return null;
@@ -197,7 +216,7 @@ export class LogsPage {
    * URL) keeps the wait honest about JSON key order and encoding.
    */
   async waitForUrlFilters(
-    type: 'traces' | 'spans',
+    type: LogsFilterScope,
     predicate: (filters: LogsUrlFilter[]) => boolean,
   ): Promise<LogsUrlFilter[]> {
     return test.step(`Wait for the ${type} filters in the URL`, async () => {
@@ -225,7 +244,7 @@ export class LogsPage {
    * id identically, so the DOM cannot distinguish "already there" from
    * "just added".
    */
-  async readPinnedChipIds(type: 'traces' | 'spans'): Promise<string[] | null> {
+  async readPinnedChipIds(type: LogsFilterScope): Promise<string[] | null> {
     return test.step(`Read the pinned chips stored for the ${type} table`, async () => {
       const key = `chips:pinnedConfig:logs.${type}`;
       const raw = await this.page.evaluate((k) => window.localStorage.getItem(k), key);
@@ -599,6 +618,48 @@ export class LogsPage {
   }
 
   /**
+   * Open the trace panel with one SPAN already selected, by URL.
+   *
+   * Distinct from `openTraceById` plus `TracePanelPage.selectSpan`, which
+   * reaches the same state by clicking through the span tree. Two things need
+   * the URL form:
+   *
+   *  - the span-selected toolbar renders differently from the trace-selected one
+   *    (`dataToView` is the span), and a spec enumerating that difference over
+   *    several spans wants each one reached from a clean document rather than
+   *    from whatever the previous selection left behind;
+   *  - `logsType` decides which table the panel is opened OVER, and it is
+   *    persisted per project — so "the panel behaves the same on the Threads tab
+   *    as on the Traces tab" is only expressible by stating the param.
+   *
+   * `projectId` is taken explicitly rather than from a previous `goto`, because
+   * this is itself the first navigation in the specs that use it.
+   */
+  async openSpanById(
+    projectId: string,
+    traceId: string,
+    spanId: string,
+    opts: { logsType?: 'traces' | 'threads' } = {},
+  ): Promise<TracePanelPage> {
+    return test.step(
+      `Open span ${spanId} of trace ${traceId} over the ${opts.logsType ?? 'traces'} tab`,
+      async () => {
+        this.projectId = projectId;
+        const env = loadEnvConfig();
+        const params = new URLSearchParams({
+          logsType: opts.logsType ?? 'traces',
+          trace: traceId,
+          span: spanId,
+        });
+        await this.page.goto(
+          `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
+        );
+        return new TracePanelPage(this.page, traceId);
+      },
+    );
+  }
+
+  /**
    * Open a trace by clicking its row, the way a user reaches one.
    *
    * Distinct from {@link openTraceById}, which navigates to the trace's URL and
@@ -614,6 +675,42 @@ export class LogsPage {
       const panel = new TracePanelPage(this.page, traceId);
       await panel.waitForFullyLoaded();
       return panel;
+    });
+  }
+
+  /**
+   * Follow a URL the BACKEND chose — the `Location` of a
+   * `/v1/session/redirect/*` answer — and return the trace panel it should have
+   * opened.
+   *
+   * Distinct from {@link openTraceById}, and it has to be: that method BUILDS
+   * the URL from `env.baseUrl`, the workspace and `/logs?trace=`, so a spec
+   * about whether the backend's own URL lands would be asserting against a URL
+   * this suite wrote. Here the string is an argument and nothing reconstructs
+   * it — which is the only way "the link the SDK printed works" is expressible.
+   *
+   * `projectId` is adopted from the landed URL rather than taken as an
+   * argument, for the same reason: the project in the link is part of what is
+   * under test, so a caller that passed it in could not notice the link naming
+   * the wrong one. It is read back out of the path so later POM calls on this
+   * instance (`traceRow`, `openTraceById`) work as they would after a `goto`.
+   */
+  async landOnTraceLink(location: string, traceId: string): Promise<TracePanelPage> {
+    return test.step(`Follow the backend's trace link to ${traceId}`, async () => {
+      await this.page.goto(location);
+      const landedProjectId = new URL(this.page.url()).pathname.match(
+        /\/projects\/([^/]+)\//,
+      )?.[1];
+      // Asserted rather than left undefined: `projectId` being null is what
+      // every other method on this POM throws on, and a landing that produced
+      // no project segment at all is a finding in its own right — not a reason
+      // for a later call to report "call goto(projectId) first".
+      expect(
+        landedProjectId,
+        'the landed URL names a project in its path',
+      ).toBeDefined();
+      this.projectId = landedProjectId!;
+      return new TracePanelPage(this.page, traceId);
     });
   }
 
@@ -732,6 +829,23 @@ export class LogsPage {
       await this.page.getByRole('menuitem', { name: 'Dataset', exact: true }).click();
       const dialog = new AddToDatasetDialogPage(this.page);
       await expect(dialog.root, 'the Add to dataset dialog is open').toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
+   * The same dropdown's "Test suite" entry.
+   *
+   * Exact, for the reason `openAddToDataset` gives: the three entries come from
+   * one `AddToDropdown`, and the list is the kind that grows. Callers select
+   * rows first — the trigger is disabled until at least one is ticked.
+   */
+  async openAddToTestSuite(): Promise<AddToTestSuiteDialogPage> {
+    return test.step('Open Add to → Test suite', async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Test suite', exact: true }).click();
+      const dialog = new AddToTestSuiteDialogPage(this.page);
+      await expect(dialog.root, 'the Add to test suite dialog is open').toBeVisible();
       return dialog;
     });
   }
@@ -1034,6 +1148,26 @@ export class LogsPage {
   }
 
   /**
+   * The Estimated cost cell of a SPAN row, in the Spans view.
+   *
+   * The same `data-cell-id` contract and the same `total_estimated_cost` column
+   * id — `TracesSpansTab` declares the column once and lists it in
+   * `DEFAULT_SPANS_COLUMNS` as well as `DEFAULT_TRACES_COLUMNS` — so this
+   * delegates rather than repeating either. Named separately all the same,
+   * because the two are different claims: the traces view's cell renders a
+   * trace's ROLL-UP across its spans, and this one renders one span's own
+   * resolved amount. A spec that means the second must not read as if it meant
+   * the first.
+   *
+   * Row identity, not position: `spanRow` and this cell both key off the ids
+   * the shared `DataTable` stamps, so a user-reordered column list cannot move
+   * the assertion onto another cell.
+   */
+  spanEstimatedCostCell(spanId: string): Locator {
+    return this.explainCell(spanId, 'cost');
+  }
+
+  /**
    * Hover a trace's Errors/Duration/Estimated cost cell and click its Ollie
    * "Explain" owl trigger, opening the popover. The trigger only renders once
    * the Ollie assistant bridge handshake (mounted via the page's assistant
@@ -1180,6 +1314,23 @@ export class LogsPage {
    * one themselves (it resets the draft and blurs the input) without letting it
    * reach the popover, so a single press leaves the popover open. The second
    * press — now that focus has left the input — dismisses the popover itself.
+   *
+   * Focus is dropped out of the popover before each press, rather than relying
+   * on the previous press having moved it. Radix's `DismissableLayer` listens
+   * for Escape on the document, so a press from anywhere dismisses the popover
+   * — UNLESS a focused descendant stops it propagating, which the autocomplete
+   * input does for exactly as long as it holds focus. "The first press frees
+   * the input" holds while the popover is quiet, but a chip whose options are
+   * still being fetched (the Trace feedback scores chip fetches its score names)
+   * re-renders and can take focus back, and then every press in the loop is
+   * eaten and the poll times out with the popover still open. Blurring is the
+   * non-destructive way to break that: it cannot activate a control the way a
+   * click somewhere neutral could, and it has no effect at all on a popover
+   * that is about to be dismissed anyway.
+   *
+   * The budget is stated rather than inherited for the same reason: the
+   * implicit `expect.timeout` is 10s, which is the whole of a slow chip's own
+   * option fetch on a loaded staging workspace.
    */
   async closeFilterChip(): Promise<void> {
     return test.step('Close the open filter chip popover', async () => {
@@ -1188,10 +1339,19 @@ export class LogsPage {
         .poll(
           async () => {
             if (!(await popover.isVisible().catch(() => true))) return false;
+            await this.page
+              .evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+              .catch(() => {});
             await this.page.keyboard.press('Escape');
             return popover.isVisible().catch(() => false);
           },
-          { intervals: [100, 250, 500, 1000] },
+          {
+            intervals: [100, 250, 500, 1000],
+            timeout: 20_000,
+            message:
+              'the chip popover must detach — it is modal, so while it is up every later click ' +
+              'on the table is swallowed',
+          },
         )
         .toBe(false);
     });
@@ -1245,16 +1405,42 @@ export class LogsPage {
     });
   }
 
+  /** The "All filters" manager's trigger — shared by all three Logs tabs. */
+  get filterManagerTrigger(): Locator {
+    return this.page.getByTestId('filter-chip-manager-trigger');
+  }
+
+  /** The open "All filters" menu. */
+  get filterManagerMenu(): Locator {
+    return this.page.getByRole('menu');
+  }
+
   /**
-   * Pin a chip that isn't shown by default by picking it from the "All filters"
-   * manager. Selecting an item pins the chip and opens its popover, so callers
-   * that follow with applyKeyedFilter() get a popover that's already open —
-   * openFilterChip() tolerates that.
+   * Pick a chip out of the "All filters" manager.
+   *
+   * What this does depends on the chip, and that is the point rather than an
+   * inconvenience. `FilterManagerPopover.handleSelectUnpinned` pins the chip and
+   * opens its popover for every kind, and for two kinds it ALSO applies a filter
+   * on the spot (opik#8724):
+   *
+   *  - a `boolean` chip is applied as `{ applied: true }`;
+   *  - a `query-builder` chip with no `key` whose default operator takes no
+   *    value — `comments`, whose `defaultOperator` is `is_not_empty` — is
+   *    applied as a complete one-row filter.
+   *
+   * Everything else (a value-taking default like Trace name's `contains`, a
+   * keyed chip like Trace feedback scores) is pinned and opened with nothing
+   * applied, which is why `applyKeyedFilter()` follows this call rather than
+   * being replaced by it — and `openFilterChip()` tolerates the already-open
+   * popover.
+   *
+   * Deliberately no settle on a filter landing: whether one did is the
+   * assertion for the specs that care, so a wait here would decide it.
    */
   async pinFilterChip(menuItemLabel: string): Promise<void> {
-    return test.step(`Pin the "${menuItemLabel}" filter chip`, async () => {
-      await this.page.getByTestId('filter-chip-manager-trigger').click();
-      const menu = this.page.getByRole('menu');
+    return test.step(`Pick "${menuItemLabel}" from the All filters manager`, async () => {
+      await this.filterManagerTrigger.click();
+      const menu = this.filterManagerMenu;
       await menu.waitFor({ state: 'visible' });
       await menu.getByText(menuItemLabel, { exact: true }).click();
     });
@@ -1590,6 +1776,69 @@ export class LogsPage {
    */
   get noMatchingResults(): Locator {
     return this.page.getByRole('heading', { name: 'No matching results' });
+  }
+
+  /**
+   * The table's ONBOARDING empty state — "No traces yet" / "No spans yet" —
+   * which is a different claim from {@link noMatchingResults}.
+   *
+   * `TracesSpansTab` picks between the two from the spans/traces existence
+   * probe alone (`showEmptyState = !isTableLoading && !hasProjectData &&
+   * rows.length === 0 && page === 1`). So this panel means "this project has
+   * never been logged to" and `noMatchingResults` means "it has, and this read
+   * matched nothing" — telling a user the first when the second is true reads
+   * as data loss. A spec about that distinction has to be able to name each
+   * state separately, which is why this exists alongside the other rather than
+   * as one "the table is empty" helper.
+   *
+   * Addressed as the heading for the same reason `noMatchingResults` is:
+   * `DataTableEmptyContent` renders a `<h3>` title beside an `<img>` whose
+   * `alt` is its own string, so the role lookup is the unambiguous one. Named
+   * after the tab rather than hard-coded, because the title is built as
+   * `No ${type} yet` from the active `TRACE_DATA_TYPE`.
+   */
+  onboardingEmptyState(type: LogsFilterScope): Locator {
+    return this.page.getByRole('heading', { name: `No ${type} yet`, exact: true });
+  }
+
+  /**
+   * The Quickstart CTA inside the onboarding empty state.
+   *
+   * The second half of "this is the onboarding panel": the heading alone is a
+   * string, while this is the panel's own action (`openQuickstart`) and renders
+   * nowhere else on the page. Asserted together with the heading so a build
+   * that kept the words and lost the panel — or that rendered the words in some
+   * other component — cannot satisfy the claim.
+   */
+  get quickstartGuideAction(): Locator {
+    return this.page.getByRole('button', { name: 'Quickstart guide' });
+  }
+
+  /**
+   * Wait until the Spans table has settled into one of its three terminal
+   * states: at least one row, the onboarding panel, or "No matching results".
+   *
+   * `waitForReady()` cannot be used for this. It waits on the string "No traces
+   * yet" and then blocks on a `Traces\s+\d+` KPI label, both of which are the
+   * Traces tab's — against the Spans tab it waits out the full test timeout on
+   * a page that finished rendering long before.
+   *
+   * Deliberately does NOT assert which state was reached: a helper that
+   * insisted on rows could not be used by a spec whose subject is the empty
+   * states, and one that accepted any of the three without the caller then
+   * asserting would pass over a page that rendered the wrong one.
+   */
+  async waitForSpansReady(opts: { timeout?: number } = {}): Promise<void> {
+    return test.step('Wait for the Spans table to settle', async () => {
+      const timeout = opts.timeout ?? 30_000;
+      await this.page
+        .locator('tr[data-row-id]')
+        .first()
+        .or(this.onboardingEmptyState('spans'))
+        .or(this.noMatchingResults)
+        .first()
+        .waitFor({ state: 'visible', timeout });
+    });
   }
 
   /**

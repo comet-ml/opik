@@ -4,6 +4,34 @@ import { loadEnvConfig } from '../config/env.config';
 import { ItemReturnNav } from './item-return-nav.page';
 import { VersionRecordsSidebarPage } from './version-records-sidebar.page';
 
+/**
+ * One "name → value" row of the record panel, as it is RENDERED.
+ *
+ * The panel is the only place three facts about a row are visible at once, and
+ * each of them is a different claim:
+ *
+ *  - `name` is the Field name box's current content, which is what a rename
+ *    changes and what the stored key is supposed to become;
+ *  - `value` is the value textarea's content, which after a commit is the only
+ *    place a STALE in-session snapshot shows itself — the grid cell beside it
+ *    reads from the server;
+ *  - `message` is the validation line under the row, `null` when the row has
+ *    none.
+ *
+ * Read as data rather than asserted through a locator because the rows are
+ * only tellable apart by their content: every row carries the same
+ * `dataset-field-row` testid and the same `Field name` label, and after an
+ * invalid rename a row's value box loses the accessible name (`<field> value`)
+ * that would otherwise identify it. A spec therefore compares the whole
+ * panel — which is also what catches a validation error landing on the row the
+ * user never touched.
+ */
+export interface RenderedFieldRow {
+  name: string;
+  value: string;
+  message: string | null;
+}
+
 export class DatasetItemsPage {
   constructor(
     private readonly page: Page,
@@ -162,6 +190,30 @@ export class DatasetItemsPage {
   }
 
   /**
+   * The same open, with the row addressed by identity.
+   *
+   * Row ORDER is not something a seed can promise — the items endpoint does not
+   * specify one — so a spec that edits one of several records and asserts the
+   * others were left alone has to say which row it opened. Identity comes from
+   * the table's own `data-row-id`; the cell index only picks something inside
+   * that row to click, and it is 1 rather than 0 because the first cell is the
+   * select checkbox, which toggles selection instead of opening the panel.
+   *
+   * The row lookup is asserted to resolve to exactly one element rather than
+   * taking `.first()`, so a grid rendering an id twice fails here instead of
+   * silently editing whichever copy matched first.
+   */
+  async openItemEditorById(itemId: string): Promise<void> {
+    return test.step(`Open editor for item ${itemId}`, async () => {
+      const row = this.itemRowById(itemId);
+      await expect(row, `exactly one row for item ${itemId}`).toHaveCount(1);
+      await row.getByRole('cell').nth(1).click();
+      await this.editItemPanel.waitFor({ state: 'visible' });
+      await this.editItemPanel.getByTestId('dataset-field-row').first().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
    * Edits a single field in the open editor. The editor autosaves: changing a
    * field stages an "edited" draft (Draft badge appears), it does not persist
    * on its own — commitDraft() turns the draft into a new version.
@@ -170,6 +222,112 @@ export class DatasetItemsPage {
     return test.step(`Edit field "${field}"`, async () => {
       await this.fieldValue(this.editItemPanel, field).fill(value);
       await this.draftBadge().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Renames one field of the open record, leaving its value alone.
+   *
+   * The row is resolved BEFORE the name box is touched, and every later locator
+   * is scoped to that row. Both of the row's inputs are addressed by the field
+   * name — the value textarea's accessible name is `<field> value` and there is
+   * one `Field name` box per row — so a lookup repeated after the rename would
+   * be looking for a label that no longer exists. Asserted to resolve to
+   * exactly one row rather than taking `.first()`, so an ambiguous field name
+   * fails loudly instead of renaming a different field.
+   *
+   * Like `editItemField`, this only stages a draft: `commitDraft()` is what
+   * turns it into a new version.
+   */
+  async renameItemField(field: string, newName: string): Promise<void> {
+    return test.step(`Rename field "${field}" to "${newName}"`, async () => {
+      const row = this.fieldRow(this.editItemPanel, field);
+      await expect(row, `exactly one "${field}" field row`).toHaveCount(1);
+      await row.getByLabel('Field name', { exact: true }).fill(newName);
+      await this.draftBadge().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * Adds a field to the open record through the panel's "Add field" button.
+   *
+   * Named first, then filled, in that order: the value box's accessible name is
+   * derived from the field's name (`Field value` while it is blank), so the
+   * stable handle for it only exists once the name does. The new row is the
+   * last one — the editor appends — and that is also the row "Add field"
+   * autofocuses, so the name box is addressed as the last of the panel rather
+   * than by a position chosen in advance.
+   *
+   * The draft badge is waited for afterwards rather than between the two fills:
+   * `DatasetItemFieldsAutosaveForm` deliberately does NOT mark the record
+   * edited for a field that has a name but no value yet, because
+   * `fieldRowsToData` skips a blank-named row and the resulting data is
+   * unchanged.
+   */
+  async addItemField(name: string, value: string): Promise<void> {
+    return test.step(`Add field "${name}" to the open record`, async () => {
+      await this.editItemPanel.getByRole('button', { name: 'Add field', exact: true }).click();
+      await this.editItemPanel.getByLabel('Field name', { exact: true }).last().fill(name);
+      await this.fieldValue(this.editItemPanel, name).fill(value);
+      await this.draftBadge().waitFor({ state: 'visible' });
+    });
+  }
+
+  /**
+   * One data column's header on the Records grid.
+   *
+   * Addressed by the shared `DataTable`'s own `data-header-id`, which is the
+   * TanStack column id — `data_<field>`, with every dot replaced, for the same
+   * reason `itemCell` documents at length. Position is not usable here: column
+   * order is user-configurable and persisted.
+   *
+   * This is the only place a field introduced by an UNCOMMITTED draft is
+   * observable at all. The items endpoint reports the saved version's columns,
+   * so `useColumnsWithDraftKeys` is what merges a draft's new keys in — and a
+   * regression there is invisible in the API.
+   */
+  itemColumnHeader(field: string): Locator {
+    const columnId = `data.${field}`.replace(/\./g, '_');
+    const headerId = columnId.replace(/["\\]/g, '\\$&');
+    return this.page
+      .getByRole('tabpanel', { name: 'Records' })
+      .locator(`th[data-header-id="${headerId}"]`);
+  }
+
+  /**
+   * Every row of the OPEN record panel, in render order, as `RenderedFieldRow`.
+   *
+   * Render order is the panel's own: `dataToFieldRows` lists the dataset's
+   * schema columns first (the items endpoint returns them alphabetically) and
+   * then any key only this record has. A spec comparing the whole array is
+   * therefore also asserting that order, which is what makes a duplicate-name
+   * assertion precise — `getFieldRowErrors` walks the rows in exactly this
+   * order and gives the name to the first claimant, so WHICH row ends up
+   * flagged is a consequence of it.
+   *
+   * The panel is asserted to hold at least one row first, so an empty answer
+   * means "no fields" rather than "called before the panel mounted".
+   */
+  async readItemEditorRows(): Promise<RenderedFieldRow[]> {
+    return test.step('Read the record panel\'s field rows as rendered', async () => {
+      const rows = this.editItemPanel.getByTestId('dataset-field-row');
+      await expect(rows.first(), 'the record panel renders at least one field row').toBeVisible();
+      return rows.evaluateAll((elements) =>
+        elements.map((element) => {
+          const name = element.querySelector('input');
+          const value = element.querySelector('textarea');
+          // `:scope > p` rather than any descendant `p`: the validation line is
+          // `FieldRowShell`'s `message` slot, a direct child of the row's outer
+          // div, and scoping it there keeps a future `note` slot from reading
+          // as an error.
+          const message = element.querySelector(':scope > p');
+          return {
+            name: (name as HTMLInputElement | null)?.value ?? '',
+            value: (value as HTMLTextAreaElement | null)?.value ?? '',
+            message: message === null ? null : (message.textContent ?? '').trim(),
+          };
+        }),
+      );
     });
   }
 
@@ -364,8 +522,25 @@ export class DatasetItemsPage {
     });
   }
 
-  private fieldValue(panel: Locator, field: string): Locator {
-    return panel.getByLabel(`${field} value`, { exact: true });
+  private fieldValue(scope: Page | Locator, field: string): Locator {
+    return scope.getByLabel(`${field} value`, { exact: true });
+  }
+
+  /**
+   * One "name → value" row of a record panel, located by the field it holds.
+   *
+   * Every row carries the same `dataset-field-row` testid and the same
+   * `Field name` label, so the field's own value box — whose accessible name is
+   * `<field> value` — is the only thing that tells the rows apart.
+   *
+   * The `has:` locator is rooted at the PAGE rather than at `panel`: Playwright
+   * anchors an inner locator's whole selector chain at each outer match, so a
+   * panel-rooted one would look for the panel inside the row and match nothing.
+   */
+  private fieldRow(panel: Locator, field: string): Locator {
+    return panel
+      .getByTestId('dataset-field-row')
+      .filter({ has: this.fieldValue(this.page, field) });
   }
 
   get addItemPanel(): Locator {

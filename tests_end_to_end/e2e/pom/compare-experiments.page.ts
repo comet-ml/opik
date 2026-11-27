@@ -84,6 +84,65 @@ export class CompareExperimentsPage {
   }
 
   /**
+   * The pass-rate badge in the header — `CompareExperimentsDetails`' own `Tag`,
+   * carrying both the "<n>% pass rate" label and the icon whose colour is the
+   * verdict.
+   *
+   * Only rendered in SINGLE-experiment mode, and only for a test-suite
+   * experiment that reports a numeric `pass_rate` (`!isCompare &&
+   * isTestSuiteExperiment && isNumber`) — so a caller must open the compare
+   * route with exactly one id.
+   *
+   * It carries no `data-testid`, and the two halves it has to be addressed by
+   * are the reason this is a composition rather than a text lookup. The label
+   * sits in its own `<div>` and the icon is that div's SIBLING, so the Tag is
+   * the only element holding both: `hasText` with an ANCHORED regex matches
+   * only an element whose entire text is the label (which rules out every
+   * header ancestor, each of which carries more), and `has` the icon then rules
+   * out the inner label div. A testid on the Tag would be the better handle and
+   * belongs in the frontend — but a release-time spec runs against a DEPLOYED
+   * build, so one added here would not exist in the bundle under test.
+   */
+  get passRateBadge(): Locator {
+    return this.page
+      .locator('div')
+      .filter({ has: this.page.locator('svg.lucide-circle-check') })
+      .filter({ hasText: /^\d+% pass rate$/ });
+  }
+
+  /**
+   * Assert the header's pass-rate badge reads exactly `label`, with a passing
+   * or failing icon.
+   *
+   * The label and the icon together, never one alone: the defect opik#9692
+   * fixed rendered "100% pass rate" beside a RED icon, so a build that got the
+   * verdict right and the number wrong — or the reverse — is exactly what this
+   * has to separate. `toHaveText` is an equality, so "99%" cannot be satisfied
+   * by "199%", and the colour is asserted as the CSS variable the component
+   * names rather than a resolved rgb triple, which is what the estate's other
+   * pass-rate assertions do (see `ExperimentGroupRows.expectGroupPassRate`).
+   */
+  async expectPassRateBadge(expected: {
+    label: string;
+    icon: 'passed' | 'failed';
+  }): Promise<void> {
+    await test.step(`the header badge reads "${expected.label}" with a ${expected.icon} icon`, async () => {
+      const badge = this.passRateBadge;
+      await expect(badge, 'exactly one pass-rate badge in the header').toHaveCount(1, {
+        timeout: 30_000,
+      });
+      await expect(badge, 'the pass-rate badge').toHaveText(expected.label, { timeout: 30_000 });
+      const icon = badge.locator('svg.lucide-circle-check');
+      await expect(icon, 'exactly one status icon in the badge').toHaveCount(1);
+      await expect(icon, "the badge's status icon colour").toHaveClass(
+        expected.icon === 'passed'
+          ? /text-\[var\(--color-green\)\]/
+          : /text-\[var\(--color-red\)\]/,
+      );
+    });
+  }
+
+  /**
    * Open the Results tab with view state already applied, and with one row's
    * detail panel expanded.
    *
@@ -1170,6 +1229,203 @@ export class CompareExperimentsPage {
         .waitFor({ state: 'visible' });
       return total;
     });
+  }
+
+  /**
+   * REPLACE the grid's filters with exactly one, driven through the real
+   * popover, and return BOTH reads it provokes: the row total and the column
+   * statistics.
+   *
+   * Separate from `addGridFilter`, which it deliberately does not alter:
+   *
+   *  - `addGridFilter` waits only for `/items/experiments/items` and says so
+   *    ("not one of the sibling column/statistics calls"). That is the right
+   *    settle for a spec about which ROWS a filter selects, and it is exactly
+   *    why a failing or blank statistics answer leaves the suite green — the
+   *    gap opik#9618 (OPIK-6915) is about. This one waits for both and hands
+   *    the caller the stats body, so the two can be compared.
+   *  - it only reaches a column's DEFAULT operator with a typed value, so
+   *    `>=` and the no-value `is empty` are unreachable through it, and the
+   *    `Feedback scores` key — a score-name dropdown here, not a text box —
+   *    cannot be set at all.
+   *
+   * **Replace, not add.** The popover accumulates rows, so applying five
+   * filters in turn through `addGridFilter` would end up asserting a
+   * conjunction of all five. "Clear all" then "Add filter" is the only route
+   * back to exactly one row: clearing while the popover is OPEN leaves it with
+   * none (the re-seed effect runs on close), which is also what makes the
+   * intervening unfiltered read harmless — it carries no `filters` param and
+   * so cannot satisfy the predicate below.
+   *
+   * `field` and `operator` are the WIRE values, and passing them is not
+   * restating the caller's own intent: they are the predicate the two
+   * responses are matched on, so a popover that built the filter for a
+   * different column or operator times out here instead of answering a
+   * question nobody asked. `value` joins the predicate when present, because
+   * the filter applies live as the value is typed and an intermediate keystroke
+   * is a legitimate response for the same field and operator.
+   */
+  async applyGridFilter(spec: {
+    /** The option label the popover's column list renders, e.g. `bucket (Dataset)`. */
+    column: string;
+    /** The filter field as it travels on the wire, e.g. `data.bucket`. */
+    field: string;
+    /** The operator's label in the dropdown, which is also its wire value (`contains`, `>=`, `is empty`). */
+    operator: string;
+    /** The wire operator, when it differs from the label — `is empty` is sent as `is_empty`. */
+    wireOperator?: string;
+    /** The score name, for a `Feedback scores` filter. Chosen from a dropdown, not typed. */
+    key?: string;
+    /** Omitted for a no-value operator; a no-value filter completes on the operator alone. */
+    value?: string;
+  }): Promise<{ total: number; stats: Array<{ name: string; type: string; value: unknown }> }> {
+    const described = `${spec.column} ${spec.operator}${spec.value === undefined ? '' : ` ${spec.value}`}`;
+    return test.step(`filter the grid where ${described}`, async () => {
+      const wireOperator = spec.wireOperator ?? spec.operator;
+
+      await this.filtersButton.click();
+      await this.page.getByRole('button', { name: 'Clear all', exact: true }).click();
+      await this.page.getByRole('button', { name: 'Add filter', exact: true }).click();
+
+      // Both waiters armed before the first choice that could complete the
+      // filter. A no-value operator completes on the operator click alone, so
+      // arming them after it would miss the only response there is.
+      const carriesFilter = (url: string): boolean => {
+        const filters = new URL(url).searchParams.get('filters');
+        if (filters === null) return false;
+        const decoded = decodeURIComponent(filters);
+        return (
+          decoded.includes(`"field":"${spec.field}"`) &&
+          decoded.includes(`"operator":"${wireOperator}"`) &&
+          (spec.value === undefined || decoded.includes(`"value":"${spec.value}"`)) &&
+          (spec.key === undefined || decoded.includes(`"key":"${spec.key}"`))
+        );
+      };
+      const rowsRead = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/items/experiments/items') &&
+          carriesFilter(response.url()) &&
+          response.ok(),
+        { timeout: FILTER_SETTLE_TIMEOUT_MS },
+      );
+      // Not `response.ok()`: a stats call that answers 500 under one filter
+      // shape is the finding, so the status has to reach the caller rather than
+      // be waited past until the step times out on something else.
+      const statsRead = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/items/experiments/items/stats') &&
+          carriesFilter(response.url()),
+        { timeout: FILTER_SETTLE_TIMEOUT_MS },
+      );
+
+      const columnSelect = this.page.locator(
+        'button[role="combobox"]:has([data-testid="filter-column"])',
+      );
+      await expect(columnSelect, 'exactly one filter row to fill in').toHaveCount(1);
+      await columnSelect.click();
+      await this.page.getByRole('option', { name: spec.column, exact: true }).click();
+
+      if (spec.key !== undefined) {
+        // The `Feedback scores` row's key is `ExperimentsFeedbackScoresSelect`,
+        // a score-name dropdown, so the key is CHOSEN and the list of choices
+        // is itself part of what this exercises — a score the comparison never
+        // recorded is not offered. Addressed as the filter row's combobox that
+        // is neither the column nor the operator one, rather than by position:
+        // the three sit in two cells whose order the row component decides.
+        const keySelect = this.page.locator(
+          'button[role="combobox"]:not(:has([data-testid="filter-column"]))' +
+            ':not(:has([data-testid="filter-operator"]))',
+        );
+        await expect(keySelect, `exactly one key selector for "${spec.column}"`).toHaveCount(1);
+        await keySelect.click();
+        await this.page.getByRole('option', { name: spec.key, exact: true }).click();
+      }
+
+      const operatorSelect = this.page.locator(
+        'button[role="combobox"]:has([data-testid="filter-operator"])',
+      );
+      await expect(operatorSelect, 'exactly one operator selector').toHaveCount(1);
+      await operatorSelect.click();
+      await this.page.getByRole('option', { name: spec.operator, exact: true }).click();
+
+      if (spec.value !== undefined) {
+        // One box, whichever row type rendered it: a dictionary row stamps
+        // `filter-dictionary-value-input`, a string row `filter-string-input`.
+        const valueBox = this.page
+          .getByTestId('filter-dictionary-value-input')
+          .or(this.page.getByTestId('filter-string-input'));
+        await expect(valueBox, 'exactly one value box').toHaveCount(1);
+        await valueBox.fill(spec.value);
+      }
+
+      // Commit by clicking outside — the popover COMMITS on click-outside and
+      // DISCARDS on Escape. The page heading is inert and always present.
+      await this.compareHeading.click();
+
+      const body: unknown = await (await rowsRead).json();
+      const total = (body as { total?: unknown }).total;
+      if (typeof total !== 'number') {
+        throw new Error(
+          'CompareExperimentsPage.applyGridFilter: the filtered read answered without a total — ' +
+            'cannot tell a narrowed result set from an unfiltered one.',
+        );
+      }
+
+      const statsResponse = await statsRead;
+      if (!statsResponse.ok()) {
+        throw new Error(
+          `CompareExperimentsPage.applyGridFilter: the statistics read for ${described} ` +
+            `answered ${statsResponse.status()}: ${(await statsResponse.text()).slice(0, 300)}`,
+        );
+      }
+      const statsBody = (await statsResponse.json()) as { stats?: unknown };
+      if (!Array.isArray(statsBody.stats)) {
+        throw new Error(
+          `CompareExperimentsPage.applyGridFilter: the statistics read for ${described} ` +
+            `answered 200 without a \`stats\` array: ${JSON.stringify(statsBody).slice(0, 200)}`,
+        );
+      }
+
+      await this.page
+        .locator('tbody tr[data-row-id], tbody tr[data-testid="no-data-row"]')
+        .first()
+        .waitFor({ state: 'visible' });
+
+      return {
+        total,
+        stats: statsBody.stats as Array<{ name: string; type: string; value: unknown }>,
+      };
+    });
+  }
+
+  /**
+   * The statistics line the grid renders under one column's header, as ONE
+   * exact string — the aggregation it chose followed by the formatted amount,
+   * e.g. `p501.5s` for a 1500 ms p50, or `-` for a column the answer carries no
+   * statistic for.
+   *
+   * Exact rather than a substring: `toContainText('1.5s')` would be satisfied
+   * by `11.5s`, and the aggregation prefix is itself a claim — `HeaderStatistic`
+   * defaults a PERCENTAGE stat to `p50` and an AVG one to `avg`, so the prefix
+   * says which number the cell is showing. The two spans the markup splits it
+   * across carry no separator, which is why the expected string has none.
+   *
+   * `columnId` is the TanStack column id as stamped into `data-header-id`, with
+   * dots replaced — `duration`, `feedback_scores_<name>`, `data_<field>` — the
+   * same spelling `readDatasetCellText` and `scoreColumnMetricNames` use.
+   *
+   * The statistic itself carries no testid of its own, so it is addressed as
+   * the last child of `HeaderWrapper`'s `data-header-wrapper` element, which
+   * renders exactly two: the column name and then the statistic. A
+   * `data-testid` on the statistic row would be the better handle and belongs
+   * in the frontend — but a release-time spec runs against a DEPLOYED build, so
+   * one added here would not exist in the bundle under test and would make the
+   * spec unrunnable rather than more stable.
+   */
+  columnStatistic(columnId: string): Locator {
+    return this.page.locator(
+      `th[data-header-id="${columnId}"] [data-header-wrapper="true"] > div:last-child`,
+    );
   }
 
   /**

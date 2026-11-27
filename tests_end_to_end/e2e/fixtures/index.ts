@@ -1,4 +1,4 @@
-export { test, expect } from './environment-split-thread.fixture';
+export { test, expect } from './dashboard-row-actions.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -316,6 +316,7 @@ export {
   REGISTRY_PROVIDERS,
   PROVIDER_GROUP,
   REGISTRY_MODEL,
+  EFFORT_CORRECTED_OPENAI_MODELS,
 } from './model-registry-providers.fixture';
 export type {
   ExperimentMessagePanelRef,
@@ -640,3 +641,248 @@ export type {
   EnvironmentSplitThreadRef,
   EnvironmentSplitThreadFixtures,
 } from './environment-split-thread.fixture';
+export type {
+  CostBreakdownGroup,
+  CostBreakdownSpansRef,
+  CostBreakdownSpansFixtures,
+} from './cost-breakdown-spans.fixture';
+export type {
+  OpenRouterRemovedRowSeed,
+  OpenRouterRemovedRowSpansRef,
+  OpenRouterRemovedRowSpansFixtures,
+} from './openrouter-removed-row-spans.fixture';
+export { OPENROUTER_CATALOG_PROVIDER } from './openrouter-removed-row-spans.fixture';
+export type {
+  CommentedOn,
+  CommentedTraceRef,
+  CommentedEntitiesRef,
+  CommentedEntitiesFixtures,
+} from './commented-entities.fixture';
+export type {
+  ThreadSearchTurnRef,
+  ThreadSearchTermRef,
+  ThreadSearchTurnsRef,
+  ThreadSearchTurnsFixtures,
+} from './thread-search-turns.fixture';
+export type {
+  MixedCaseModelCostSeed,
+  MixedCaseModelCostSpansRef,
+  MixedCaseModelCostSpansFixtures,
+} from './mixed-case-model-cost-spans.fixture';
+export type {
+  DatasetExperimentRef,
+  AllDatasetExperimentsRef,
+  AllDatasetExperimentsFixtures,
+} from './all-dataset-experiments.fixture';
+export type {
+  TruncatedThreadTurnRef,
+  TruncatedThreadRef,
+  TruncatedThreadMessagesRef,
+  TruncatedThreadMessagesFixtures,
+} from './truncated-thread-messages.fixture';
+export { THREAD_TRUNCATION_THRESHOLD } from './truncated-thread-messages.fixture';
+export type {
+  PlaygroundSpanSeedRef,
+  PlaygroundSpanLoadsRef,
+  PlaygroundSpanLoadsFixtures,
+} from './playground-span-loads.fixture';
+export { LOGGED_GOOGLE_AI, LOGGED_GOOGLE_VERTEXAI } from './playground-span-loads.fixture';
+export type {
+  EvaluationMethodExperimentRef,
+  EvaluationMethodExperimentsRef,
+  EvaluationMethodExperimentsFixtures,
+} from './evaluation-method-experiments.fixture';
+export type {
+  EvaluatorSourceTraceRef,
+  EvaluatorSourceTracesRef,
+  EvaluatorSourceTracesFixtures,
+} from './evaluator-source-traces.fixture';
+export type {
+  MultiAnnotatorTraceRef,
+  MultiAnnotatorQueueRef,
+  MultiAnnotatorQueueFixtures,
+} from './multi-annotator-queue.fixture';
+export type {
+  SettledCompareExperimentRef,
+  SettledCompareExperimentsRef,
+  SettledCompareExperimentsFixtures,
+} from './settled-compare-experiments.fixture';
+export { SETTLED_ITEM_COUNT, compareMarker } from './settled-compare-experiments.fixture';
+export type { SecondProjectFixtures } from './second-project.fixture';
+export type {
+  ScopedTsClient,
+  ProjectScopedTsClientsFixtures,
+} from './project-scoped-ts-clients.fixture';
+export type {
+  GuardrailTriggerAlertRef,
+  GuardrailTriggerAlertFixtures,
+} from './guardrail-trigger-alert.fixture';
+export {
+  GUARDRAIL_TYPE_CONFIG,
+  GUARDRAIL_TYPES_KEY,
+  SEEDED_GUARDRAIL_TYPES,
+} from './guardrail-trigger-alert.fixture';
+export type {
+  PassCriteriaSuiteRef,
+  PassCriteriaSuiteFixtures,
+} from './pass-criteria-suite.fixture';
+export {
+  SUITE_RUNS_PER_ITEM,
+  SUITE_PASS_THRESHOLD,
+  OVERRIDE_RUNS_PER_ITEM,
+} from './pass-criteria-suite.fixture';
+export type {
+  SpansEmptyStateProjectRef,
+  SpansEmptyStateProjectsRef,
+  SpansEmptyStateProjectsFixtures,
+} from './spans-empty-state-projects.fixture';
+export type {
+  GroupedExperimentRef,
+  ExperimentGroupRef,
+  GroupedDatasetExperimentsRef,
+  GroupedDatasetExperimentsFixtures,
+} from './grouped-dataset-experiments.fixture';
+export type {
+  ScoredGroupExperimentRef,
+  ScoredGroupExperimentsRef,
+  ScoredGroupExperimentsFixtures,
+} from './scored-group-experiments.fixture';
+export { SCORED_GROUP_SCORE_NAME } from './scored-group-experiments.fixture';
+export type {
+  GovCloudBedrockCostSeed,
+  GovCloudBedrockCostSpansRef,
+  GovCloudBedrockCostSpansFixtures,
+} from './govcloud-bedrock-cost-spans.fixture';
+export type {
+  EditableRecordDatasetRef,
+  EditableRecordDatasetFixtures,
+} from './editable-record-dataset.fixture';
+export {
+  EDITABLE_RECORD_DATA,
+  BYSTANDER_RECORD_DATA,
+} from './editable-record-dataset.fixture';
+export type {
+  DatasetColumnMappingRef,
+  DatasetColumnMappingFixtures,
+} from './dataset-column-mapping.fixture';
+export {
+  DCM_TRACE_INPUT,
+  DCM_TRACE_OUTPUT,
+  DCM_EXISTING_COLUMN,
+  DCM_SEED_ITEM_DATA,
+} from './dataset-column-mapping.fixture';
+export type {
+  ComparisonStatsRowRef,
+  ComparisonStatsFiltersRef,
+  ComparisonStatsFiltersFixtures,
+} from './comparison-stats-filters.fixture';
+export { CSF_ROWS, CSF_SCORE_NAME } from './comparison-stats-filters.fixture';
+export type {
+  OtelReportedCostSeed,
+  OtelReportedCostSpansRef,
+  OtelReportedCostSpansFixtures,
+} from './otel-reported-cost-spans.fixture';
+export type {
+  PassRateExperimentRef,
+  PassRateGroupRef,
+  GroupedPassRateExperimentsRef,
+  GroupedPassRateExperimentsFixtures,
+} from './grouped-pass-rate-experiments.fixture';
+export {
+  OLLIE_TABLE_COLUMNS,
+  OLLIE_TABLE_ROWS,
+  OLLIE_TABLE_COST_AS_STORED,
+  OLLIE_TABLE_COST_ASCENDING,
+  OLLIE_TABLE_COST_DESCENDING,
+  OVERSIZED_SAVED_COLUMN_WIDTH,
+} from './ollie-table-widget.fixture';
+export type {
+  OllieTableWidgetSeed,
+  OllieTableWidgetRef,
+  OllieTableWidgetFixtures,
+} from './ollie-table-widget.fixture';
+export type {
+  TabSplitExperimentRef,
+  TabSplitProjectRef,
+  ExperimentsTabSplitRef,
+  ExperimentsTabSplitFixtures,
+} from './experiments-tab-split.fixture';
+export type {
+  SameNameProjectRef,
+  SameNameProjectsRef,
+  SameNameProjectsFixtures,
+  SameNameCopyRef,
+  SameNameDatasetsRef,
+  SameNameDatasetsFixtures,
+} from './same-name-datasets.fixture';
+export type {
+  FilterChipSourceRef,
+  ExperimentsFilterChipRef,
+  ExperimentsFilterChipFixtures,
+} from './experiments-filter-chip.fixture';
+export type {
+  NumpyPayloadTracesRef,
+  NumpyPayloadTracesFixtures,
+} from './numpy-payload-traces.fixture';
+export {
+  NUMPY_EXPECTED_PAYLOAD,
+  NUMPY_NUMERIC_KEY,
+  NUMPY_NUMERIC_VALUE,
+} from './numpy-payload-traces.fixture';
+export type {
+  WidgetEditTracesRef,
+  WidgetEditTracesFixtures,
+} from './widget-edit-traces.fixture';
+export {
+  WET_FILTER_COLUMN,
+  WET_FILTER_OPERATOR,
+  WET_MATCHING_TRACES,
+  WET_TOTAL_TRACES,
+} from './widget-edit-traces.fixture';
+export type {
+  VersionScopedExperimentRef,
+  VersionScopedExperimentsRef,
+  VersionScopedExperimentsFixtures,
+} from './version-scoped-experiments.fixture';
+export {
+  VSE_V1_ITEM_COUNT,
+  VSE_V2_ITEM_COUNT,
+} from './version-scoped-experiments.fixture';
+export type {
+  OpenRouterRegenRepricedSeed,
+  OpenRouterRegenRepricedSpansRef,
+  OpenRouterRegenRepricedSpansFixtures,
+} from './openrouter-regen-repriced-spans.fixture';
+export { OPENROUTER_REGEN_CATALOG_PROVIDER } from './openrouter-regen-repriced-spans.fixture';
+export type {
+  SeededScore,
+  ScoredTraceSpanRef,
+  ScoredTraceSpansRef,
+  ScoredTraceSpansFixtures,
+} from './scored-trace-spans.fixture';
+export type {
+  DuplicateTraceSpanSeed,
+  DuplicateTraceIdProjectSeed,
+  DuplicateTraceIdProjectsRef,
+  DuplicateTraceIdProjectsFixtures,
+} from './duplicate-trace-id-projects.fixture';
+export type {
+  MixedSuiteExperimentRef,
+  MixedSuiteExperimentsRef,
+  MixedSuiteExperimentsFixtures,
+} from './mixed-suite-experiments.fixture';
+export type {
+  PromptMixedSourceExperimentRef,
+  PromptMixedSourceExperimentsRef,
+  PromptMixedSourceExperimentsFixtures,
+} from './prompt-mixed-source-experiments.fixture';
+export type {
+  OpenRouterCacheRateSpanSeed,
+  OpenRouterCacheRateSpansRef,
+  OpenRouterCacheRateSpansFixtures,
+} from './openrouter-cache-rate-spans.fixture';
+export { NO_CACHE_RATE_PAIRS } from './openrouter-cache-rate-spans.fixture';
+export type {
+  DashboardRowActionsRef,
+  DashboardRowActionsFixtures,
+} from './dashboard-row-actions.fixture';

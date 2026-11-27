@@ -138,6 +138,67 @@ export const REGISTRY_MODEL = {
   geminiWithoutThinkingOff: 'Gemini 2.5 Pro',
 } as const;
 
+/**
+ * The two OpenAI rows 2.2.148 shipped with no curated `effort` block, which
+ * 2.2.151's provider-model sync CORRECTED.
+ *
+ * opik#9608 appended `gpt-6.2-astra` and `gpt-6.2-sol` to
+ * `llm-models-default.yaml` as bare `id` + `label`, with no `reasoning: true`
+ * and no `params:`, while every sibling `gpt-6.x` row carried both — so the
+ * served catalog answered `effort: {accepted: false}` for them and both
+ * model-settings panels agreed by mounting no effort control. opik#9648's sync
+ * gave both rows the same `params` block their siblings have:
+ * `effort: {accepted: true, levels: [low, medium, high, xhigh], default:
+ * medium}` plus a `routes.responses_api` override.
+ *
+ * So the claim on these two ids FLIPPED in 2.2.151, and the two specs below
+ * said in so many words that it would: the invariant they assert is that the
+ * panel renders exactly what the catalog curates, and "correct the yaml and the
+ * panel must grow the control" is the branch that has now been taken. The list
+ * is kept — rather than deleted and the rows forgotten — because the ids still
+ * need the policy exemption below, and because a reader of either spec wants to
+ * know which rows this release moved.
+ *
+ * Deliberately a SECOND list rather than two more `REGISTRY_MODEL` keys. That
+ * map is "one model per panel behaviour, the cheapest member of its class";
+ * these two are neither cheap nor a class — they are two specific ids a
+ * release shipped, named here so the exemption they need is auditable in one
+ * place instead of blending into a list a reader scans for behaviours.
+ *
+ * ## Why they need naming at all
+ *
+ * `llm-model-policy`'s forbidden fragments include `astra` and `gpt-6`,
+ * precisely so no spec can drift onto OpenAI's newest and most expensive
+ * entries. Both ids match. They are registered unbilled on the same basis as
+ * the Claude Opus ids above: the specs using them SELECT the model and READ
+ * the model-settings panel, and never press Run — the playground spec never
+ * submits a completion and the rule-editor spec never submits the form. That is
+ * unchanged by the correction: reading a control's option list costs nothing,
+ * whether the control is there or not. See
+ * `playground-openai-effort-options-match-catalog.spec.ts`.
+ *
+ * ## Both spellings, on purpose
+ *
+ * The two tables under test are keyed differently — the pickers by display
+ * label, the catalog by provider id — and a spec comparing one against the
+ * other has to be able to name both. `label` is also what the policy guard
+ * matches on, so it cannot be read out of the catalog at run time and must be
+ * written down here; the specs assert the catalog's own label still equals it,
+ * so a re-labelled row fails loudly rather than selecting something else.
+ */
+export const EFFORT_CORRECTED_OPENAI_MODELS = [
+  {
+    /** The first OpenAI entry in the catalog, as of 2.2.148 and still. */
+    displayName: 'GPT 6.2 Astra',
+    catalogId: 'gpt-6.2-astra',
+  },
+  {
+    /** Its sibling, shipped in the same sync and corrected in the same one. */
+    displayName: 'GPT 6.2 Sol',
+    catalogId: 'gpt-6.2-sol',
+  },
+] as const;
+
 export interface ModelRegistryProvidersRef {
   /** The provider types the model pickers will offer, all of them configured. */
   providers: readonly string[];
@@ -199,6 +260,10 @@ export interface ModelRegistryProvidersFixtures {
 export const test = baseTest.extend<ModelRegistryProvidersFixtures>({
   modelRegistryProviders: async ({}, use) => {
     for (const model of Object.values(REGISTRY_MODEL)) registerUnbilledModel(model);
+    // Read through the panels and never run — see EFFORT_CORRECTED_OPENAI_MODELS.
+    for (const { displayName } of EFFORT_CORRECTED_OPENAI_MODELS) {
+      registerUnbilledModel(displayName);
+    }
 
     const added: string[] = [];
     // Tracked per provider rather than inferred from "the runner holds some

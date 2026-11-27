@@ -19,6 +19,13 @@ export const ALERT_EVENT_TYPE = {
    */
   traceFeedbackScore: 'trace:feedback_score',
   traceThreadFeedbackScore: 'trace_thread:feedback_score',
+  /**
+   * The only trigger whose config is a SET of types rather than a threshold or
+   * a condition group: its `filter:guardrail_type` config carries a
+   * comma-joined `guardrail_types` string, and the editor renders one checkbox
+   * per type. See `guardrailTypeRow` on `AlertEditorPage`.
+   */
+  traceGuardrailsTriggered: 'trace:guardrails_triggered',
 } as const;
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_TYPE];
@@ -34,6 +41,7 @@ export const ALERT_EVENT_TITLE: Record<AlertEventType, string> = {
   [ALERT_EVENT_TYPE.traceErrors]: 'Trace errors threshold',
   [ALERT_EVENT_TYPE.traceFeedbackScore]: 'Trace feedback score threshold',
   [ALERT_EVENT_TYPE.traceThreadFeedbackScore]: 'Thread feedback score threshold',
+  [ALERT_EVENT_TYPE.traceGuardrailsTriggered]: 'Guardrail triggered',
 };
 
 export interface AlertSeed {

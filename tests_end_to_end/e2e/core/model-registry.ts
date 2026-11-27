@@ -17,6 +17,19 @@ export interface RegistryModel {
   /** The id the frontend matches on, e.g. `gpt-5-nano` or `openai/gpt-5-nano`. */
   id: string;
   /**
+   * The provider-qualified id, when the row carries one — `vertex_ai/gemini-2.5-flash`
+   * for the Vertex AI copy of a model Gemini also serves bare.
+   *
+   * Absent on most rows, and that absence is load-bearing:
+   * `transformFetched` builds every dropdown value as
+   * `getRoutableProviderModelValue(provider, qualified_name || id)`, so this is
+   * the field that makes the two providers' otherwise-identical rows resolve to
+   * two different stored values behind one display label. A spec asserting that
+   * a span logged under `google_ai` and one logged under `google_vertexai` land
+   * on DIFFERENT providers has to be able to name the value it expects.
+   */
+  qualified_name?: string | null;
+  /**
    * The row's display label — and the flag that decides whether any model
    * picker LISTS it.
    *
@@ -167,4 +180,80 @@ export function pickRegistryListingPair(
     );
   }
   return { unlisted: unlisted.id, listed: listed.id, listedLabel: listed.label! };
+}
+
+/**
+ * The value a picker STORES for a registry row, as the frontend composes it.
+ *
+ * This IS `transformFetched`'s rule, not a paraphrase:
+ * `getRoutableProviderModelValue(provider, qualified_name || id)`, whose only
+ * special case is Vertex AI — a value with no `/` in it gets a `vertex_ai/`
+ * prefix, because `vertex-ai` and `gemini` serve overlapping model names and the
+ * prefix is what keeps the two providers' rows from collapsing onto one stored
+ * value.
+ *
+ * Mirrored here because on `vertex-ai` the stored value and the row's `id` are
+ * DIFFERENT strings, and a spec about a stored id has to be able to name the one
+ * the product would actually have written. {@link pickRegistryListingPair}
+ * returns `id`, which is the right answer for every provider whose rows carry no
+ * `qualified_name` and the wrong one for Vertex.
+ */
+export function registryStoredValue(provider: string, model: RegistryModel): string {
+  const base = model.qualified_name || model.id;
+  return provider === 'vertex-ai' && !base.includes('/') ? `vertex_ai/${base}` : base;
+}
+
+/**
+ * One provider's listed/unlisted pair as the values a picker would STORE, with
+ * the listed row's label beside it.
+ *
+ * The sibling of {@link pickRegistryListingPair} for the Vertex shape, and
+ * separate from it on purpose: that one answers "which id does this provider
+ * serve", which is what a spec seeding a span wants, and this one answers "what
+ * would the picker have persisted", which is what a spec seeding a RULE wants.
+ * Collapsing them would make every existing caller's `unlisted` silently change
+ * meaning on the one provider where the two differ.
+ *
+ * `listedLabel` is returned because it is the discriminating half: a picker
+ * showing a labelled row's LABEL rather than its stored value is what proves the
+ * unlisted row's raw-value fallback actually ran, instead of the trigger merely
+ * echoing whatever it was given.
+ */
+export interface RegistryStoredValuePair {
+  /** The value a picker would store for a row it does NOT offer. */
+  unlistedValue: string;
+  /** The value a picker would store for a row it offers. */
+  listedValue: string;
+  /** The label a picker renders for the listed row. */
+  listedLabel: string;
+}
+
+export function pickRegistryStoredValuePair(
+  models: RegistryModelsMap,
+  provider: string,
+): RegistryStoredValuePair {
+  const rows = models[provider];
+  if (!Array.isArray(rows)) {
+    throw new Error(
+      `pickRegistryStoredValuePair: the registry carries no '${provider}' provider ` +
+        `(it has: ${Object.keys(models).join(', ') || 'nothing'})`,
+    );
+  }
+  const byId = (a: RegistryModel, b: RegistryModel) => (a.id < b.id ? -1 : 1);
+  const unlisted = rows
+    .filter((row) => !listsInPicker(row) && !NOT_UNLISTED_BY_LABEL(row.id))
+    .sort(byId)[0];
+  const listed = rows.filter(listsInPicker).sort(byId)[0];
+  if (!unlisted || !listed) {
+    throw new Error(
+      `pickRegistryStoredValuePair: '${provider}' serves ${rows.length} models but ` +
+        `${unlisted ? 'none without' : 'none with'} a label — no listed/unlisted ` +
+        'pair to pick, so a spec about an unlisted stored value has no control',
+    );
+  }
+  return {
+    unlistedValue: registryStoredValue(provider, unlisted),
+    listedValue: registryStoredValue(provider, listed),
+    listedLabel: listed.label!,
+  };
 }
