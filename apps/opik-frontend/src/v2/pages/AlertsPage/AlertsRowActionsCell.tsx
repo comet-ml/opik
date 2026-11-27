@@ -1,19 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
 import { Alert } from "@/types/alerts";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import useAlertsBatchDeleteMutation from "@/api/alerts/useAlertsBatchDeleteMutation";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
@@ -45,13 +37,27 @@ const AlertsRowActionsCell: React.FunctionComponent<
     });
   }, [navigate, workspaceName, activeProjectId, alert.id]);
 
+  const rowActions: RowAction[] = [
+    {
+      id: "edit",
+      label: "Edit",
+      icon: Pencil,
+      onClick: handleEditClick,
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => {
+        setOpen(1);
+        resetKeyRef.current = resetKeyRef.current + 1;
+      },
+      destructive: true,
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 1}
@@ -62,32 +68,8 @@ const AlertsRowActionsCell: React.FunctionComponent<
         confirmText="Delete alert"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={handleEditClick}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

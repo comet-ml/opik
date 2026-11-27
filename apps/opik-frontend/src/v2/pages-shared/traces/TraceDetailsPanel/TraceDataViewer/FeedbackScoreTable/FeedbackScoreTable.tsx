@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { Trash } from "lucide-react";
 import { TraceFeedbackScore } from "@/types/traces";
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -15,11 +16,12 @@ import {
 import { ExpandingFeedbackScoreRow } from "./types";
 import {
   getHasDeletableFeedbackScoreRow,
+  getIsDeletableFeedbackScoreRow,
   mapFeedbackScoresToRowsWithExpanded,
 } from "./utils";
 import { ExpandedState, ColumnSizingState } from "@tanstack/react-table";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
-import ActionsCell from "./cells/ActionsCell";
+import RowActions from "@/shared/DataTable/RowActions";
 import DeleteFeedbackScoreValueDialog from "./DeleteFeedbackScoreValueDialog";
 import { useFeedbackScoreDeletePreference } from "./hooks/useFeedbackScoreDeletePreference";
 import useLocalStorageState from "use-local-storage-state";
@@ -85,7 +87,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   }, [feedbackScores, entityType, isAggregatedSpanScores]);
 
   // Delete only renders on the current user's own scores; without any, the
-  // column would be a blank strip stretched by the fixed table layout.
+  // actions gutter would reserve empty space on every row.
   const showActionsColumn =
     Boolean(onDeleteFeedbackScore) &&
     getHasDeletableFeedbackScoreRow(rows, currentUserName);
@@ -131,11 +133,21 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
 
     if (showActionsColumn) {
       baseColumns.push(
-        generateActionsColumDef({
-          cell: ActionsCell,
-          customMeta: {
-            onDelete: handleDeleteClick,
-          },
+        generateActionsColumDef<ExpandingFeedbackScoreRow>({
+          cell: ({ row }) =>
+            getIsDeletableFeedbackScoreRow(row.original, currentUserName) ? (
+              <RowActions
+                actions={[
+                  {
+                    id: "delete",
+                    label: "Delete",
+                    icon: Trash,
+                    destructive: true,
+                    onClick: () => handleDeleteClick(row.original),
+                  },
+                ]}
+              />
+            ) : null,
         }),
       );
     }
@@ -147,6 +159,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
     handleDeleteClick,
     showActionsColumn,
     isAggregatedSpanScores,
+    currentUserName,
   ]);
 
   return (

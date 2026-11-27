@@ -1,19 +1,11 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
 import EditPromptDetailsSheet from "@/v2/pages/PromptsPage/EditPromptDetailsSheet";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EDIT_KEY = 1;
@@ -43,13 +35,36 @@ export const PromptRowActionsCell: React.FunctionComponent<
 
   if (!hasActions) return null;
 
+  const openDialog = (dialog: number) => {
+    setOpen(dialog);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  };
+  const rowActions: RowAction[] = [
+    ...(canEditPrompts
+      ? [
+          {
+            id: "edit",
+            label: "Edit",
+            icon: Pencil,
+            onClick: () => openDialog(EDIT_KEY),
+          },
+        ]
+      : []),
+    ...(canDeletePrompts
+      ? [
+          {
+            id: "delete",
+            label: "Delete",
+            icon: Trash,
+            onClick: () => openDialog(DELETE_KEY),
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <EditPromptDetailsSheet
         key={`edit-${resetKeyRef.current}`}
         open={open === 1}
@@ -67,42 +82,7 @@ export const PromptRowActionsCell: React.FunctionComponent<
         confirmText="Delete prompt"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {canEditPrompts && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(EDIT_KEY);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-            >
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {canDeletePrompts && (
-            <>
-              {canEditPrompts && <DropdownMenuSeparator />}
-              <DropdownMenuItem
-                onClick={() => {
-                  setOpen(DELETE_KEY);
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                }}
-                variant="destructive"
-              >
-                <Trash className="mr-2 size-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };

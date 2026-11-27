@@ -1,16 +1,8 @@
 import React, { useCallback, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { DatasetItem } from "@/types/datasets";
 import { useDeleteItem } from "@/store/TestSuiteDraftStore";
 import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
@@ -47,39 +39,34 @@ export const DatasetItemRowActionsCell: React.FC<
     setActiveRowId?.(datasetItem.id);
   }, [datasetItem.id, setActiveRowId]);
 
+  const rowActions: RowAction[] = [
+    ...(setActiveRowId
+      ? [
+          {
+            id: "edit",
+            label: "Edit",
+            icon: Pencil,
+            onClick: handleEditClick,
+          },
+        ]
+      : []),
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: handleDeleteClick,
+      destructive: true,
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <RemoveDatasetItemsDialog
         open={confirmOpen}
         setOpen={setConfirmOpen}
         onConfirm={performDelete}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {setActiveRowId && (
-            <DropdownMenuItem onClick={handleEditClick}>
-              <Pencil className="mr-2 size-4" />
-              Edit
-            </DropdownMenuItem>
-          )}
-          {setActiveRowId && <DropdownMenuSeparator />}
-          <DropdownMenuItem onClick={handleDeleteClick} variant="destructive">
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };

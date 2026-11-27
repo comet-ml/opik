@@ -1,16 +1,8 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Trash } from "lucide-react";
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
+import { Trash } from "lucide-react";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { WorkspaceMember } from "@/plugins/comet/types";
 import { useRemoveFromTeamMutation } from "@/plugins/comet/api/useRemoveFromTeamMutation";
 import useWorkspace from "@/plugins/comet/useWorkspace";
@@ -44,31 +36,22 @@ const WorkspaceMemberActionsCell = (
 
   const displayName = row.userName || row.email || "User";
 
-  const menuButton = (
-    <Button variant="ghost" size="icon" className="size-8">
-      <MoreHorizontal className="size-4" />
-      <span className="sr-only">Actions menu</span>
-    </Button>
-  );
-
-  const deleteMenuItem = (
-    <DropdownMenuItem
-      onClick={handleDeleteClick}
-      disabled={isInvitedByEmail}
-      variant="destructive"
-    >
-      <Trash className="mr-2 size-4" />
-      Delete
-    </DropdownMenuItem>
-  );
+  const rowActions: RowAction[] = [
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: handleDeleteClick,
+      destructive: true,
+      ...(isInvitedByEmail && {
+        disabled: true,
+        disabledReason: "Cannot remove users invited by email",
+      }),
+    },
+  ];
 
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open}
@@ -79,19 +62,8 @@ const WorkspaceMemberActionsCell = (
         confirmText="Remove user"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {isInvitedByEmail ? (
-            <TooltipWrapper content="Cannot remove users invited by email">
-              <div className="w-full">{deleteMenuItem}</div>
-            </TooltipWrapper>
-          ) : (
-            deleteMenuItem
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

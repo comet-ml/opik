@@ -116,11 +116,7 @@ const renderPage = (permissions = DEFAULT_PERMISSIONS) => {
 
 const openRowMenu = (policyName: string) => {
   const row = screen.getByText(policyName).closest("tr")!;
-  // Radix opens dropdowns on pointerdown, not click.
-  fireEvent.pointerDown(
-    within(row).getByText("Actions menu").closest("button")!,
-    new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
-  );
+  fireEvent.click(within(row).getByRole("button", { name: "More actions" }));
 };
 
 describe("GuardrailsPage", () => {
@@ -190,7 +186,7 @@ describe("GuardrailsPage", () => {
     const { rerender } = renderPage();
 
     openRowMenu(SECOND.name);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     await waitFor(() =>
       expect(window.location.search).toContain(`policyId=${SECOND.id}`),
@@ -207,7 +203,7 @@ describe("GuardrailsPage", () => {
     rerender();
 
     openRowMenu(FIRST.name);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
 
     const panel = screen.getByTestId("panel-duplicate");
     expect(panel.dataset.policy).toBe(FIRST.name);

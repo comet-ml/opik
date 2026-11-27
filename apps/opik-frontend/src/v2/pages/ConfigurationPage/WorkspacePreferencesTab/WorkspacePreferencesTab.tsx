@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useQueryParam } from "use-query-params";
+import { Pencil } from "lucide-react";
 
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -22,7 +23,7 @@ import {
   WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT,
   WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE,
 } from "./constants";
-import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
+import RowActions from "@/shared/DataTable/RowActions";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
 import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
 import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
@@ -147,11 +148,19 @@ const WorkspacePreferencesTab: React.FC = () => {
     if (canConfigureWorkspaceSettings) {
       return [
         ...baseColumns,
-        generateActionsColumDef({
-          cell: WorkspacePreferencesActionsCell,
-          customMeta: {
-            onEdit: handleEdit,
-          },
+        generateActionsColumDef<WorkspacePreference>({
+          cell: ({ row }) => (
+            <RowActions
+              actions={[
+                {
+                  id: "edit",
+                  label: "Edit",
+                  icon: Pencil,
+                  onClick: () => handleEdit(row.original),
+                },
+              ]}
+            />
+          ),
         }),
       ];
     }

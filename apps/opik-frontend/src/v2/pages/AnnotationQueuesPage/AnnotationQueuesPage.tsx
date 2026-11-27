@@ -9,7 +9,6 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { Plus } from "lucide-react";
 import {
-  ColumnDef,
   ColumnPinningState,
   ColumnSort,
   RowSelectionState,
@@ -34,7 +33,6 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import AutomationCell from "@/v2/pages-shared/annotation-queues/AutomationCell";
 import ScopeCell from "@/v2/pages-shared/annotation-queues/ScopeCell";
-import AnnotateQueueCell from "@/v2/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/v2/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
@@ -385,16 +383,6 @@ export const AnnotationQueuesPage: React.FC = () => {
           sortableColumns: sortableBy,
         },
       ),
-      {
-        accessorKey: "annotate_queue",
-        header: "",
-        cell: AnnotateQueueCell,
-        // Fits "Annotator's view" plus its icon; at 140 the button overflowed the cell by 17px.
-        size: 180,
-        enableResizing: false,
-        enableHiding: false,
-        enableSorting: false,
-      } as ColumnDef<AnnotationQueue>,
       generateActionsColumDef({
         cell: AnnotationQueueRowActionsCell,
       }),

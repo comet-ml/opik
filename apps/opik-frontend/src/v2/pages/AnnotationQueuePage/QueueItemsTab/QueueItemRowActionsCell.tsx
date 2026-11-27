@@ -1,15 +1,8 @@
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { Trash } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useAnnotationQueueDeleteItemsMutation from "@/api/annotation-queues/useAnnotationQueueDeleteItemsMutation";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
 import { CellContext } from "@tanstack/react-table";
 import { Thread, Trace } from "@/types/traces";
@@ -39,13 +32,21 @@ const QueueItemRowActionsCell: React.FC<
     }
   }, [annotationQueueId, mutate, item]);
 
+  const actions: RowAction[] = [
+    {
+      id: "remove",
+      label: "Remove from queue",
+      icon: Trash,
+      destructive: true,
+      onClick: () => {
+        setOpen(1);
+        resetKeyRef.current = resetKeyRef.current + 1;
+      },
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={open === 1}
@@ -56,27 +57,8 @@ const QueueItemRowActionsCell: React.FC<
         confirmText="Remove item"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Remove from queue
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={actions} />
+    </>
   );
 };
 

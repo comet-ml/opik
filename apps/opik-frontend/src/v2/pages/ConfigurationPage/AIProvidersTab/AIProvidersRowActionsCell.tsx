@@ -1,17 +1,9 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import { ProviderObject } from "@/types/providers";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
@@ -23,6 +15,8 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
+  const isReadOnly = providerKey.read_only === true;
+
   const { mutate: deleteProviderKey } = useProviderKeysDeleteMutation();
 
   const deleteProviderKeyHandler = useCallback(() => {
@@ -31,23 +25,33 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
     });
   }, [providerKey.id, deleteProviderKey]);
 
-  if (providerKey.read_only) {
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-        className="p-0"
-      />
-    );
-  }
+  const openDialog = (dialog: number) => {
+    setOpen(dialog);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  };
+
+  // Read-only (system-managed) providers can't be edited or deleted; the name
+  // column marks them as read-only.
+  const rowActions: RowAction[] = isReadOnly
+    ? []
+    : [
+        {
+          id: "edit",
+          label: "Edit",
+          icon: Pencil,
+          onClick: () => openDialog(2),
+        },
+        {
+          id: "delete",
+          label: "Delete",
+          icon: Trash,
+          onClick: () => openDialog(1),
+          destructive: true,
+        },
+      ];
 
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <ManageAIProviderDialog
         key={`edit-${resetKeyRef.current}`}
         providerKey={providerKey}
@@ -64,37 +68,8 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         confirmText="Delete configuration"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 

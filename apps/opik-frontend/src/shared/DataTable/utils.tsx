@@ -43,6 +43,7 @@ import {
   extractIdFromRowId,
 } from "@/lib/groups";
 import { cn } from "@/lib/utils";
+import { ROW_ACTIONS_GUTTER_SIZE } from "@/shared/DataTable/RowActions";
 
 export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
   return ROW_HEIGHT_MAP[rowHeight];
@@ -88,8 +89,11 @@ export const getCommonPinningStyles = <TData,>({
     return {};
   }
 
+  // A zero-width column whose content floats over the cells to its left (row
+  // actions): always sticky, and no border since it takes no space.
+  const isOverlay = Boolean(column.columnDef.meta?.overlay);
   const isFirstRightPinnedNonGroupedColumn =
-    isPinned === "right" && lastRightPinnedColumnId === column.id;
+    isPinned === "right" && lastRightPinnedColumnId === column.id && !isOverlay;
 
   return {
     // Last left-pinned column border is handled via CSS class (comet-pinned-last-left)
@@ -104,12 +108,14 @@ export const getCommonPinningStyles = <TData,>({
         ? `${column.getStart("left")}px`
         : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
-    position: applyStickyWorkaround ? "unset" : "sticky",
+    position: applyStickyWorkaround && !isOverlay ? "unset" : "sticky",
     // +2 ensures pinned header cells always appear above non-pinned headers,
     // which use TABLE_HEADER_Z_INDEX + (0 or 1) in DataTable.tsx
     zIndex: isHeader
       ? TABLE_HEADER_Z_INDEX + 2 + (isLastHeaderRow ? 0 : 1)
-      : TABLE_ROW_Z_INDEX + 1,
+      : // +2 keeps pinned body cells (and the row actions) above the body
+        // resize strips, which sit at +1 over their neighbouring cells.
+        TABLE_ROW_Z_INDEX + 2,
   };
 };
 
@@ -137,6 +143,7 @@ export const getCommonPinningClasses = <TData,>({
     "comet-pinned-cell",
     isHeader ? "bg-soft-background" : "bg-background",
     isLastLeftPinned && "comet-pinned-last-left",
+    column.columnDef.meta?.overlay && "comet-overlay-cell",
     forceGroup && "comet-grouped-cell",
   );
 };
@@ -296,10 +303,11 @@ export const generateActionsColumDef = <TData,>({
     accessorKey: COLUMN_ACTIONS_ID,
     meta: {
       custom: customMeta,
+      overlay: true,
     },
     header: "",
     cell,
-    size: 56,
+    size: ROW_ACTIONS_GUTTER_SIZE,
     enableHiding: false,
     enableResizing: false,
     enableSorting: false,

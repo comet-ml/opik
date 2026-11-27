@@ -1,20 +1,12 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Copy, MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Copy, Pencil, Trash } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
-import { Button } from "@/ui/button";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useFeedbackDefinitionDeleteMutation from "@/api/feedback-definitions/useFeedbackDefinitionDeleteMutation";
 import AddEditFeedbackDefinitionDialog from "@/v2/pages-shared/datasets/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
-import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import RowActions, { RowAction } from "@/shared/DataTable/RowActions";
 
 const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
   CellContext<FeedbackDefinition, unknown>
@@ -33,13 +25,35 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackDefinition.id]);
 
+  const openDialog = (dialog: number) => {
+    setOpen(dialog);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  };
+
+  const rowActions: RowAction[] = [
+    {
+      id: "edit",
+      label: "Edit",
+      icon: Pencil,
+      onClick: () => openDialog(2),
+    },
+    {
+      id: "clone",
+      label: "Clone",
+      icon: Copy,
+      onClick: () => openDialog(3),
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: Trash,
+      onClick: () => openDialog(1),
+      destructive: true,
+    },
+  ];
+
   return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      className="justify-end p-0"
-      stopClickPropagation
-    >
+    <>
       <AddEditFeedbackDefinitionDialog
         key={`edit-${resetKeyRef.current}`}
         feedbackDefinition={feedbackDefinition}
@@ -57,46 +71,8 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
         confirmText="Delete feedback definition"
         confirmButtonVariant="destructive"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(3);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Copy className="mr-2 size-4" />
-            Clone
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </CellWrapper>
+      <RowActions actions={rowActions} />
+    </>
   );
 };
 
