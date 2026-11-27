@@ -452,6 +452,15 @@ class TopicRunStore {
                 })
                 .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
                 .then(Mono.defer(() -> traceTopicsDAO.deleteRowsOfDeletedTraces(rows)
+                        .doOnNext(deleted -> {
+                            if (deleted > 0) {
+                                log.info("Deleted the trace_topics rows of traces deleted since they were read, "
+                                        + "source '{}', run '{}', workspace '{}', traces '{}'",
+                                        rows.getFirst().source().getValue(), rows.getFirst().runId(), workspace.id(),
+                                        deleted);
+                            }
+                        })
+                        .then()
                         .onErrorResume(error -> {
                             // The rows hold ids only, every reader takes only traces that exist, and retention
                             // deletes them.
