@@ -29,7 +29,7 @@ class TopicMergerTest {
     }
 
     @Test
-    @DisplayName("the rename call names each merged topic; a name left out or taken keeps the first former name")
+    @DisplayName("the rename call names each merged topic; a name left out, taken or another's fallback keeps the first former name")
     void renames() {
         var merged = List.of(
                 new TopicMerger.Merged(List.of("Weather by City", "Weather by Country"),
@@ -44,7 +44,8 @@ class TopicMergerTest {
         assertThat(ask.request().prompt()).contains("Weather by Country", "rain in Paris tomorrow?");
         var answer = JsonUtils.getJsonNodeFromString("""
                 {"topics": [{"id": 0, "name": "Weather Forecasts", "definition": "Forecasts."},
-                            {"id": 1, "name": "travel tips", "definition": "Taken."}]}
+                            {"id": 1, "name": "travel tips", "definition": "Taken."},
+                            {"id": 2, "name": "flights", "definition": "The fallback of id 1."}]}
                 """);
         var names = TopicsTestAlgorithm.finished(ask.next().apply(answer));
 

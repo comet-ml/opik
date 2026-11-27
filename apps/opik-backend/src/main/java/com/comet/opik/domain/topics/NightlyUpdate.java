@@ -130,34 +130,18 @@ class NightlyUpdate {
     /** The rename call over the topics that took others tonight; each gets its name. */
     private static NightStep<Integer> rename(NightState state, NightWindow window, int[] labels,
             List<TopicMerger.Merge> merges, int examples, TopicTasks tasks) {
-        var roots = TopicMerger.roots(state.getTopics().size(), merges);
-        var kept = merges.stream().map(merge -> roots[merge.kept()]).distinct().sorted().toList();
-        var merged = new ArrayList<TopicMerger.Merged>();
-        for (int root : kept) {
-            var names = new ArrayList<>(List.of(state.topic(root).getName()));
-            var definitions = new ArrayList<>(List.of(state.topic(root).getDefinition()));
-            for (var merge : merges) {
-                if (roots[merge.absorbed()] == root) {
-                    names.add(state.topic(merge.absorbed()).getName());
-                    definitions.add(state.topic(merge.absorbed()).getDefinition());
-                }
-            }
-            var members = IntStream.range(0, labels.length).filter(i -> labels[i] == root).toArray();
-            merged.add(new TopicMerger.Merged(names, definitions, (double) members.length / labels.length,
-                    examples(window, members, state.topic(root).getPrototypes(), examples)));
-        }
-        var taken = new HashSet<String>();
-        for (int t : state.live()) {
-            if (!kept.contains(t)) {
-                taken.add(state.topic(t).getName());
-            }
-        }
-        return TopicMerger.rename(merged, taken, tasks).map(names -> {
-            for (int m = 0; m < kept.size(); m++) {
-                state.topic(kept.get(m)).rename(names.get(m).name(), names.get(m).definition());
-            }
-            return names.size();
-        });
+        return TopicMerger.rename(merges, state.getTopics().size(), state.live(),
+                t -> state.topic(t).getName(), (root, members) -> {
+                    var traces = IntStream.range(0, labels.length).filter(i -> labels[i] == root).toArray();
+                    return new TopicMerger.Merged(
+                            members.stream().map(t -> state.topic(t).getName()).toList(),
+                            members.stream().map(t -> state.topic(t).getDefinition()).toList(),
+                            (double) traces.length / labels.length,
+                            examples(window, traces, state.topic(root).getPrototypes(), examples));
+                }, tasks).map(names -> {
+                    names.forEach((root, name) -> state.topic(root).rename(name.name(), name.definition()));
+                    return names.size();
+                });
     }
 
     /**

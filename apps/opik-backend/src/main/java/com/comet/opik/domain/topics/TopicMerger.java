@@ -5,9 +5,17 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.IntFunction;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Finds topics that cover the same traces. A topic's centre is the normalised mean of its member vectors. Two topics
@@ -52,10 +60,41 @@ class TopicMerger {
         return root;
     }
 
+    /** The topics folded into {@code root} after the merges that gave {@code roots}: {@code root} first, then by index. */
+    static List<Integer> members(@NonNull int[] roots, int root) {
+        return IntStream.range(0, roots.length).filter(t -> roots[t] == root).boxed()
+                .sorted(Comparator.comparingInt(t -> t == root ? -1 : t)).toList();
+    }
+
+    /**
+     * The rename call for {@code merges}, then per topic that took others its name. {@code merged} gives the call's
+     * entry for such a topic from its {@link #members}; the names of the other {@code candidates} still standing are
+     * taken.
+     *
+     * @param candidates the live topic indices; a folded one is skipped
+     */
+    static NightStep<Map<Integer, Name>> rename(@NonNull List<Merge> merges, int topicCount, @NonNull int[] candidates,
+            @NonNull IntFunction<String> nameOf, @NonNull BiFunction<Integer, List<Integer>, Merged> merged,
+            @NonNull TopicTasks tasks) {
+        var roots = roots(topicCount, merges);
+        var renamed = merges.stream().map(merge -> roots[merge.kept()]).distinct().sorted().toList();
+        var taken = Arrays.stream(candidates).filter(t -> roots[t] == t && !renamed.contains(t))
+                .mapToObj(nameOf).collect(Collectors.toSet());
+        var entries = renamed.stream().map(root -> merged.apply(root, members(roots, root))).toList();
+        return rename(entries, taken, tasks).map(names -> {
+            var out = new LinkedHashMap<Integer, Name>();
+            for (int m = 0; m < renamed.size(); m++) {
+                out.put(renamed.get(m), names.get(m));
+            }
+            return out;
+        });
+    }
+
     /**
      * The rename call over {@code merged}, then per merged topic its name, in order. A name left out, blank, a
-     * catch-all, or equal (by {@link AuthorApplier#nameKey}) to one in {@code taken} or to an earlier one keeps the
-     * first former name and definition.
+     * catch-all, or equal (by {@link AuthorApplier#nameKey}) to one in {@code taken}, to an earlier one, or to another
+     * merged topic's first former name keeps the first former name and definition. Those first names are reserved up
+     * front, so a merged topic that keeps its first name never meets another with the same name.
      *
      * @param taken the names of the other live topics
      */
@@ -79,13 +118,17 @@ class TopicMerger {
         var named = new Name[merged.size()];
         var used = new HashSet<String>();
         taken.forEach(name -> used.add(AuthorApplier.nameKey(name)));
+        merged.forEach(entry -> used.add(AuthorApplier.nameKey(entry.names().getFirst())));
         for (var entry : NightJson.objects(answer == null ? null : answer.get("topics"))) {
             var id = NightJson.integer(entry.get("id"));
             var name = TopicText.name(text(entry.get("name")));
             var definition = text(entry.get("definition"));
             if (id == null || id < 0 || id >= merged.size() || named[id] != null || name.isEmpty()
-                    || definition.isEmpty() || AuthorApplier.isCatchAllName(name)
-                    || !used.add(AuthorApplier.nameKey(name))) {
+                    || definition.isEmpty() || AuthorApplier.isCatchAllName(name)) {
+                continue;
+            }
+            var key = AuthorApplier.nameKey(name);
+            if (!key.equals(AuthorApplier.nameKey(merged.get(id).names().getFirst())) && !used.add(key)) {
                 continue;
             }
             named[id] = new Name(name, definition);

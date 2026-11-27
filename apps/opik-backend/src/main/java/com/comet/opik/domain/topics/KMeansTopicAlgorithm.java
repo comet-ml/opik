@@ -16,13 +16,11 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -133,33 +131,28 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                 return NightStep.done(discovered(topics, otherPrototypes, finishStats));
             }
             var roots = TopicMerger.roots(topics.size(), merges);
-            var kept = IntStream.range(0, topics.size()).filter(t -> roots[t] == t).toArray();
-            var renamed = Arrays.stream(kept)
-                    .filter(root -> IntStream.range(0, topics.size()).anyMatch(t -> t != root && roots[t] == root))
-                    .boxed().toList();
-            var merged = renamed.stream().map(root -> merged(applied.topics(), roots, root)).toList();
-            var taken = Arrays.stream(kept).filter(t -> !renamed.contains(t)).mapToObj(t -> topics.get(t).name())
-                    .collect(Collectors.toSet());
-            return TopicMerger.rename(merged, taken, tasks).map(names -> {
-                var out = new ArrayList<NewTopic>();
-                for (int t : kept) {
-                    var prototypes = IntStream.range(0, topics.size()).filter(u -> roots[u] == t)
-                            .boxed().sorted(Comparator.comparingInt(u -> u == t ? -1 : u))
-                            .flatMap(u -> topics.get(u).prototypes().stream()).toList();
-                    int m = renamed.indexOf(t);
-                    var topic = topics.get(t).toBuilder().prototypes(prototypes);
-                    out.add(m < 0
-                            ? topic.build()
-                            : topic.name(names.get(m).name()).definition(names.get(m).definition()).build());
-                }
-                return discovered(out, otherPrototypes, finishStats);
-            });
+            return TopicMerger.rename(merges, topics.size(), IntStream.range(0, topics.size()).toArray(),
+                    t -> topics.get(t).name(), (root, members) -> merged(applied.topics(), members), tasks)
+                    .map(names -> {
+                        var out = new ArrayList<NewTopic>();
+                        for (int t = 0; t < topics.size(); t++) {
+                            if (roots[t] != t) {
+                                continue;
+                            }
+                            var prototypes = TopicMerger.members(roots, t).stream()
+                                    .flatMap(u -> topics.get(u).prototypes().stream()).toList();
+                            var topic = topics.get(t).toBuilder().prototypes(prototypes);
+                            var name = names.get(t);
+                            out.add(name == null
+                                    ? topic.build()
+                                    : topic.name(name.name()).definition(name.definition()).build());
+                        }
+                        return discovered(out, otherPrototypes, finishStats);
+                    });
         }
 
-        /** A merged topic for the rename call: {@code root} first, then the topics folded into it. */
-        private TopicMerger.Merged merged(List<AppliedTopic> applied, int[] roots, int root) {
-            var members = IntStream.range(0, roots.length).filter(t -> roots[t] == root).boxed()
-                    .sorted(Comparator.comparingInt(t -> t == root ? -1 : t)).toList();
+        /** A merged topic for the rename call from its {@link TopicMerger#members}. */
+        private TopicMerger.Merged merged(List<AppliedTopic> applied, List<Integer> members) {
             var groupsOf = members.stream().flatMap(t -> applied.get(t).groups().stream()).toList();
             var byGroup = new HashMap<Integer, GroupSummary>();
             groups.forEach(group -> byGroup.put(group.group(), group));
