@@ -1163,7 +1163,7 @@ public class AiLabelsTickService {
      * The level without its parameter ({@code output_truncated:4096} → {@code output_truncated}), to keep the metric
      * bounded.
      */
-    private static String levelOf(String compactionLevel) {
+    static String levelOf(String compactionLevel) {
         int colon = compactionLevel.indexOf(':');
         return colon < 0 ? compactionLevel : compactionLevel.substring(0, colon);
     }

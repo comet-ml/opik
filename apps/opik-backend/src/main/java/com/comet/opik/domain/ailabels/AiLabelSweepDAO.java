@@ -63,6 +63,9 @@ class AiLabelSweepDAO {
     record WorkspaceHealth(@NonNull String workspaceId, long unsettled, long unsettledPastSlo) {
     }
 
+    /** The renderer version that first shrinks arrays, and so fits traces that earlier versions left over budget. */
+    static final int RENDER_OVER_BUDGET_FIXED_IN = 2;
+
     // The latest version of each trace in the horizon; created_at is the only time filter and its minmax index does the
     // narrowing. Open traces carry the epoch end_time, not NULL.
     private static final String CANDIDATE_CTES = """
@@ -82,8 +85,8 @@ class AiLabelSweepDAO {
                 AND last_updated_at \\< now64(6) - toIntervalSecond(:quiet_seconds)
             ),
             latest_status AS (
-                SELECT workspace_id, project_id, trace_id, task, trace_created_at, task_version, status, retryable, attempt,
-                    updated_at
+                SELECT workspace_id, project_id, trace_id, task, trace_created_at, task_version, renderer_version, status,
+                    retryable, attempt, error_code, updated_at
                 FROM ai_label_status
                 WHERE workspace_id IN :workspace_ids
                 AND task IN :task_names
@@ -92,9 +95,12 @@ class AiLabelSweepDAO {
                 LIMIT 1 BY workspace_id, project_id, task, trace_id
             ),
             judged AS (
-                SELECT workspace_id, project_id, trace_id, task, attempt,
+                SELECT workspace_id, project_id, trace_id, task,
                     task_version >= <required_status> AS is_current,
-                    is_current AND (
+                    status = 'failed' AND error_code = :render_over_budget
+                        AND renderer_version \\< :render_over_budget_fixed_in AS rerender,
+                    if(rerender, 0, attempt) AS attempts_made,
+                    is_current AND NOT rerender AND (
                         status = 'done'
                         OR (status = 'failed' AND (NOT retryable OR attempt >= :max_attempts))
                         OR (status = 'failed' AND retryable AND updated_at > now64(6) - toIntervalSecond(:retry_delay_seconds))
@@ -105,7 +111,7 @@ class AiLabelSweepDAO {
                 SELECT workspace_id, project_id, trace_id,
                     groupArrayIf(task, settled) AS settled_tasks,
                     -- As pairs: two separate groupArrays aren't guaranteed to come back in the same order.
-                    groupArrayIf((task, attempt), is_current AND NOT settled) AS retries
+                    groupArrayIf((task, attempts_made), is_current AND NOT settled) AS retries
                 FROM judged
                 GROUP BY workspace_id, project_id, trace_id
             ),
@@ -127,6 +133,8 @@ class AiLabelSweepDAO {
             """;
 
     // A task version older than required is never settled, but its attempts belong to the old version, so they reset.
+    // Likewise a trace over the render budget under a renderer before RENDER_OVER_BUDGET_FIXED_IN, which fits more:
+    // it starts over at attempt 1. Later renderer versions don't change what fits, so they don't re-sweep these.
     // Newest first (ids are UUIDv7), so under overload the newest traces are labeled and the oldest age out of H. Traces
     // in flight are left out here, before the LIMIT: the newest C would otherwise be exactly the ones in flight.
     private static final String SWEEP = CANDIDATE_CTES + """
@@ -218,7 +226,9 @@ class AiLabelSweepDAO {
                             .bind("horizon_seconds", config.getHorizon().toSeconds())
                             .bind("quiet_seconds", config.getQuietPeriod().toSeconds())
                             .bind("max_attempts", config.getRetry().getMaxAttempts())
-                            .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds());
+                            .bind("retry_delay_seconds", config.getRetry().getDelay().toSeconds())
+                            .bind("render_over_budget", AiLabelsTickService.RENDER_OVER_BUDGET)
+                            .bind("render_over_budget_fixed_in", RENDER_OVER_BUDGET_FIXED_IN);
                     bindTasks(statement, tasks);
                     extraBinds.accept(statement);
                     return statement.execute();
