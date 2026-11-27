@@ -193,5 +193,6 @@ export function validateConfig(config: OpikConfig) {
 }
 
 function isCloud(apiUrl: string) {
-  return new URL(apiUrl).hostname.endsWith("comet.com");
+  const { hostname } = new URL(apiUrl);
+  return hostname === "comet.com" || hostname.endsWith(".comet.com");
 }
