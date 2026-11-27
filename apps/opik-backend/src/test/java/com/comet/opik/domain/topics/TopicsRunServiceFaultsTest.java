@@ -5,6 +5,7 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.infrastructure.inference.InferenceClient;
+import com.comet.opik.infrastructure.inference.InferenceException;
 import com.comet.opik.infrastructure.inference.InferenceJson;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResponse;
 import com.comet.opik.infrastructure.inference.ItemResponse.GenerateResult;
@@ -48,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
@@ -368,6 +370,35 @@ class TopicsRunServiceFaultsTest {
         // The discovery run's insert only.
         verify(traceTopicsDAO, times(1)).insert(any());
         assertThat(sum(metricReader, "topics.runs", "status", "failed", "error_code", "save")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a nightly update whose naming call errors saves and counts the call in topics.nightly.degraded_calls "
+            + "by workspace, call and error code")
+    @SuppressWarnings("unchecked")
+    void failedCallIsCounted() {
+        discoveryThenEmptyNaming();
+        // Only the added call fails: any call of tonight's real steps gets the empty naming answer.
+        when(client.generate(argThat(request -> request.requestId().endsWith(":failing")), any()))
+                .thenReturn(Mono.error(mock(InferenceException.class)));
+        var naming = LlmRequest.builder().call(LlmCall.NAMING).tag("failing").prompt("p")
+                .schema(InferenceJson.MAPPER.createObjectNode()).maxTokens(10).build();
+        // One naming call ahead of tonight's real steps, whichever path it takes.
+        doAnswer(invocation -> {
+            var steps = (NightStep<TopicUpdate>) invocation.callRealMethod();
+            return NightStep.ask(naming, answer -> steps, () -> steps);
+        }).when(algorithm).update(any(), any(), anyInt());
+
+        var outcome = service.nightlyUpdate(IDS.generate(), projectId, night.plusDays(1), TRACES)
+                .contextWrite(TopicsTestData.context(workspace)).block();
+
+        assertThat(outcome.status()).isEqualTo(TopicProject.RunStatus.SAVED);
+        assertThat(points(metricReader, "topics.nightly.degraded_calls")).singleElement().satisfies(point -> {
+            assertThat(point.value()).isEqualTo(1);
+            assertThat(point.get("call")).isEqualTo("naming");
+            assertThat(point.get("error_code")).isEqualTo("llm_error");
+            assertThat(point.get("workspace_name")).isEqualTo(workspaceName);
+        });
     }
 
     /**

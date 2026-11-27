@@ -7,8 +7,10 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -237,16 +239,22 @@ public class TopicsRunService {
             }
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .map(answer -> new Called(() -> ask.next().apply(answer.value()), plus(calls, answer.stats())))
-                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(new Called(ask.failed(),
-                                degraded(run, ask.request(), (TopicsRunException) error, calls))))
+                        .map(answer -> Called.builder()
+                                .next(() -> ask.next().apply(answer.value()))
+                                .calls(plus(calls, answer.stats()))
+                                .build())
+                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(Called.builder()
+                                .next(ask.failed())
+                                .calls(degraded(run, ask.request(), (TopicsRunException) error, calls))
+                                .build()))
                         .flatMap(called -> cpu(run, "update", called.next()::get)
                                 .flatMap(next -> night(run, next, called.calls())));
         };
     }
 
     /** After one call: the night's next step, and the calls' stats so far. */
-    private record Called(Supplier<NightStep<TopicUpdate>> next, ObjectNode calls) {
+    @Builder(toBuilder = true)
+    private record Called(@NonNull Supplier<NightStep<TopicUpdate>> next, @NonNull ObjectNode calls) {
     }
 
     /** A call that timed out or errored; a bad answer and any other failure still end the night. */
@@ -257,9 +265,11 @@ public class TopicsRunService {
 
     /** The calls' stats with one more entry under {@code degraded_calls}, after its WARN and its metric. */
     private ObjectNode degraded(TopicRun run, LlmRequest call, TopicsRunException failure, ObjectNode calls) {
-        log.warn("Topics run '{}' call '{}' failed, project '{}', error code '{}', '{}': the night goes on without "
-                + "it, its groups stay in Other until the next night", run.runId(), call.tag(), run.projectId(),
-                failure.getCode().getValue(), failure.getMessage());
+        // The error types, not the exception: its causes can quote the answer, as for a failed run.
+        log.warn("Topics run '{}' call '{}' failed, project '{}', error code '{}', message '{}', errors '{}': the "
+                + "night goes on without it, its groups stay in Other until the next night", run.runId(), call.tag(),
+                run.projectId(), failure.getCode().getValue(), failure.getMessage(),
+                ExceptionUtils.getThrowableList(failure).stream().map(TopicsErrors::formatError).toList());
         metrics.degradedCall(run.workspace(), call.call(), failure.getCode());
         var stats = calls.deepCopy();
         stats.withArray("degraded_calls").addObject().put("call", call.tag()).put("error_code",
