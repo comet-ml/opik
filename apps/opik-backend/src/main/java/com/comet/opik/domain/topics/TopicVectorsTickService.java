@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -151,8 +152,7 @@ public class TopicVectorsTickService {
                                                     createdAfter(backfillLowerBound), budget)
                                                     .then(due.isEmpty()
                                                             ? Mono.just(undrained)
-                                                            : undrainedAfterDiscovery(enabled.workspaceIds(),
-                                                                    undrained))
+                                                            : undrainedAfterDiscovery(due, undrained))
                                                     .flatMap(
                                                             backfills -> backfill(visits, backfills, backfillLowerBound,
                                                                     budget))
@@ -343,16 +343,25 @@ public class TopicVectorsTickService {
     }
 
     /**
-     * The backfills not drained yet, read again after a discovery wrote rows, so this tick's backfill already reads
-     * them. When that read fails, the backfill reads those from before the discovery, and the new rows wait a tick.
+     * The backfills not drained yet after a discovery wrote rows, so this tick's backfill already reads them: those of
+     * the discovered workspaces read again, the others' as the tick read them, as only a discovery wrote rows since.
+     * The projects the fresh phase started are added by the backfill phase. When that read fails, the backfill reads
+     * those from before the discovery, and the new rows wait a tick.
      */
-    private Mono<Map<String, List<TopicBackfill>>> undrainedAfterDiscovery(List<String> workspaceIds,
+    private Mono<Map<String, List<TopicBackfill>>> undrainedAfterDiscovery(List<String> discovered,
             Map<String, List<TopicBackfill>> before) {
-        return backfiller.undrained(workspaceIds).onErrorResume(exception -> {
-            log.warn("Topic vectors backfills not read after discovery, backfilling those from before it",
-                    exception);
-            return Mono.just(before);
-        });
+        return backfiller.undrained(discovered)
+                .map(after -> {
+                    var merged = new HashMap<>(before);
+                    merged.keySet().removeAll(discovered);
+                    merged.putAll(after);
+                    return Map.copyOf(merged);
+                })
+                .onErrorResume(exception -> {
+                    log.warn("Topic vectors backfills not read after discovery, backfilling those from before it",
+                            exception);
+                    return Mono.just(before);
+                });
     }
 
     /** One small write per workspace, as its turn ends: a tick cancelled later keeps the workspaces it finished. */

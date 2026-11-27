@@ -29,7 +29,8 @@ class CandidateGrouper {
                     .groups(List.of()).candidates(List.of()).build();
         }
         int d = window.dimensions();
-        var merged = IntentMerger.merge(window.texts(unassigned), window.rows(unassigned), d);
+        // window.rows is this call's own copy, so it is merged in place and never restored.
+        var merged = IntentMerger.mergeInPlace(window.texts(unassigned), window.rows(unassigned), d).merged();
         int k = KMeans.groupCount(merged.size(), config.getNightlyTextsPerGroup(), config.getNightlyMinGroups(),
                 config.getNightlyMaxGroups(), merged.size());
         var weights = Arrays.stream(merged.weights()).asDoubleStream().toArray();

@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
+import { Plus } from "lucide-react";
 
 import { convertColumnDataToColumn } from "@/lib/table";
 import { ProviderObject, PROVIDER_TYPE } from "@/types/providers";
@@ -124,6 +125,19 @@ const AIProvidersTab = () => {
 
   return (
     <div data-testid="ai-providers-tabpanel">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="comet-title-xs">AI Providers</h2>
+        {canUpdateAIProviders && (
+          <Button
+            variant="default"
+            size="xs"
+            onClick={handleAddConfigurationClick}
+          >
+            <Plus className="mr-1 size-4" />
+            Add configuration
+          </Button>
+        )}
+      </div>
       <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_an_ai_provider]}
@@ -136,11 +150,6 @@ const AIProvidersTab = () => {
           placeholder="Search by name"
           dimension="sm"
         />
-        {canUpdateAIProviders && (
-          <Button onClick={handleAddConfigurationClick} size="sm">
-            Add configuration
-          </Button>
-        )}
       </div>
 
       <DataTable

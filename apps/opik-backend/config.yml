@@ -3114,10 +3114,10 @@ topics:
     #  Description: ClickHouse priority of the collecting count; a higher number yields to lower ones, 0 is none. The
     #  counts per day run at the server's default priority. From 0 to 1000
     priority: ${TOPICS_READ_PRIORITY:-0}
-    #  Default: 8192
+    #  Default: 1024
     #  Description: Rows per block of the collecting count; its in-flight per-trace arrays grow with it. From 1024 to
     #  1048576
-    maxBlockSize: ${TOPICS_READ_MAX_BLOCK_SIZE:-8192}
+    maxBlockSize: ${TOPICS_READ_MAX_BLOCK_SIZE:-1024}
     #  Default: 10s
     #  Description: A request's ClickHouse reads end within this. From 1s to 60s
     budget: ${TOPICS_READ_BUDGET:-10s}
