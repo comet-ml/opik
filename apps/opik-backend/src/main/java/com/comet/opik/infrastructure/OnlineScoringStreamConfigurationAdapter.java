@@ -84,7 +84,7 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
     @Override
     public Duration getPendingMessageDuration() {
         // shared with the startup check that the scoring status TTL outlasts a redelivery
-        return onlineScoringConfig.pendingMessageDurationOf(streamConfig);
+        return streamConfig.pendingMessageDurationOr(onlineScoringConfig.getPendingMessageDuration());
     }
 
     @Override

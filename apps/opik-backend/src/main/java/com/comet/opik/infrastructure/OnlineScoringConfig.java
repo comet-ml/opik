@@ -16,7 +16,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -185,13 +184,8 @@ public class OnlineScoringConfig {
         }
         return streams.stream()
                 .filter(Objects::nonNull)
-                .map(this::pendingMessageDurationOf)
+                .map(stream -> stream.pendingMessageDurationOr(pendingMessageDuration))
                 .allMatch(pending -> scoringStatusTtl.toMilliseconds() >= 2 * pending.toMilliseconds());
-    }
-
-    /** The stream's own pending message duration, or the global one when it sets none. */
-    public Duration pendingMessageDurationOf(@NonNull StreamConfiguration stream) {
-        return Optional.ofNullable(stream.getPendingMessageDuration()).orElse(pendingMessageDuration);
     }
 
     @Data
@@ -235,5 +229,10 @@ public class OnlineScoringConfig {
 
         @JsonProperty
         @Min(0) @Max(10_000) private Integer streamTrimLimit;
+
+        /** This stream's pending message duration, or {@code global} when it sets none. */
+        public Duration pendingMessageDurationOr(Duration global) {
+            return Optional.ofNullable(pendingMessageDuration).orElse(global);
+        }
     }
 }
