@@ -979,10 +979,8 @@ class TopicsNightlyIntegrationTest {
         var update = nightlyRun(projectId);
         assertThat(update.status()).isEqualTo(TopicProject.RunStatus.SAVED);
         int windowTraces = update.stats().path("window_traces").asInt();
-        Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(data.traceTopics(workspaceId, projectId)).noneMatch(label -> deleted.contains(label.traceId()));
-            assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces - deleted.size());
-        });
+        assertThat(data.traceTopics(workspaceId, projectId)).noneMatch(label -> deleted.contains(label.traceId()));
+        assertThat(labels(workspaceId, projectId, update.runId())).hasSize(windowTraces - deleted.size());
     }
 
     @Test
