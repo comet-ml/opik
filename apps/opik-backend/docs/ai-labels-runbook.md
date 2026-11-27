@@ -182,7 +182,7 @@ Every body has `today` and `window_from` (UTC dates, both included) and `topics`
 | `status` | When | Other fields |
 |---|---|---|
 | `disabled` | The workspace is not opted in to both topics and ai-labels, or `TOPICS_ENABLED_WORKSPACES` lists it at a stage before `ui`. This includes a workspace opted out after a run: its topics stay in MySQL and are not shown. | None. No ClickHouse query. |
-| `collecting` | Opted in, and the project has no live topic: before its discovery run, or after all its topics retired. | `vectors_in_window` (traces with a topic vector in the window) and `min_vectors` (`TOPICS_RUN_MIN_VECTORS`). `last_run_at` after a saved run. `attempt` (`status` only) when the project's newest `topic_runs` row (by `started_at`, then `run_id`) is `running` or `failed`. |
+| `collecting` | Opted in, and the project has no live topic: before its discovery run, or after all its topics retired. | `vectors_in_window` (traces with a topic vector in the window) and `min_vectors` (`TOPICS_RUN_MIN_VECTORS`). `last_run_at` after a saved run. `attempt` (`status` only) when the project's `topic_projects.run_status` is `queued`, `running` or `cancelling` (shown as `running`) or `failed`. |
 | `ready` | Opted in, and the project has at least one live topic. | `last_run_at`, `total_traces`, `labelled_from`, `topics` in rank order, `other`. |
 | `too_large` | Opted in, and a ClickHouse read of `collecting` or `ready` hit a `TOPICS_READ_*` size guard: rows (158), memory (241), bytes (307) or rows or bytes (396). A retry fails the same way, so the page shows the state and does not retry. The backend logs a WARN `Topics read is too large` with the workspace and the project. | None. Not cached: the next request reads again. |
 
@@ -209,7 +209,7 @@ row as it is.
   optimization and evaluator traces and hidden traces have topic rows, but no count includes them. A topic's `count`
   is then the number of traces Logs lists for it.
 - **Rows.** Every row counts: arrival rows and run rows. A run writes its rows only after its MySQL save commits, so a
-  failed run has none. A run's rows still count after retention deletes its `topic_runs` row.
+  failed run has none. A run's rows still count after a later run takes its place in `topic_projects`.
 - **Latest row.** Each trace counts once, by its latest row (the greatest `last_updated_at`, a run row over an
   arrival row stamped at the same time). A trace whose
   latest row is a tombstone (`is_deleted = 1`) does not count.
@@ -238,28 +238,28 @@ SELECT COUNT(*) > 0 AS eligible
 FROM ai_label_workspaces
 WHERE workspace_id = '<workspace_id>' AND enabled = TRUE;
 
--- MySQL: the discovery run and the last saved run (`last_run_at`). No row means no live topic: `collecting`
-SELECT first_built_at, last_success_at, last_run_id
-FROM topic_project_states
+-- MySQL: the discovery run and the last saved run (`last_run_at` is `last_success_at`). No row, or no
+-- `list_run_id`, means no live topic: `collecting`
+SELECT first_built_at, last_success_at, list_run_id
+FROM topic_projects
 WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
 
--- MySQL: the project's live topics; none means `collecting`
+-- MySQL: the project's live topics; none means `collecting`. A retired topic's row is deleted
 SELECT id, name, born
 FROM topics
-WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>' AND retired_at IS NULL
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
 ORDER BY born, id;
 
--- MySQL: the newest run, for `attempt` in `collecting`: shown when `running` or `failed`, omitted when `saved`
-SELECT run_id, status, started_at, error_code
-FROM topic_runs
-WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>'
-ORDER BY started_at DESC, run_id DESC
-LIMIT 1;
+-- MySQL: the current or last run, for `attempt` in `collecting`: `queued`, `running` and `cancelling` show as
+-- `running`, `failed` as `failed`; `saved` or no run is omitted
+SELECT run_id, run_mode, run_status, run_started_at, run_error_code
+FROM topic_projects
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
 
 -- MySQL: the live topic ids for the ClickHouse query, quoted and comma-separated
 SELECT CONCAT('''', GROUP_CONCAT(id SEPARATOR ''','''), '''') AS live_ids
 FROM topics
-WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>' AND retired_at IS NULL;
+WHERE workspace_id = '<workspace_id>' AND project_id = '<project_id>';
 ```
 
 The ClickHouse query below is for the default window of 30 days: each `- 29` is `windowDays - 1`.
@@ -484,8 +484,8 @@ Only `timeout` counts toward the retry wait. A queued run that is cancelled fail
 
 | `run_error_code` | Meaning |
 |---|---|
-| `llm_timeout` | The LLM call ran out of `TOPICS_RUN_LLM_DEADLINE`. |
-| `llm_error` | The LLM call failed after its retries, or with a 4xx. The run's `failed` log line has the code and HTTP status. |
+| `llm_timeout` | The LLM call ran out of `TOPICS_RUN_LLM_DEADLINE`. A nightly update's calls do not fail it: see "What a nightly update does". |
+| `llm_error` | The LLM call failed after its retries, or with a 4xx. The run's `failed` log line has the code and HTTP status. A nightly update's calls do not fail it. |
 | `llm_bad_answer` | The answer has no JSON object, or breaks the schema. The run logs the answer's length and SHA-256, not its text. |
 | `window_read` | The ClickHouse window read failed (it stops after `TOPICS_RUN_READ_TIMEOUT`), or the window had no usable vector. |
 | `invariant` | The check before the save failed: a prototype without 384 values or not of unit length. |
@@ -711,6 +711,39 @@ so it counts under Other. The next plan, or the run endpoint above, builds the l
 | `204` | The list is forgotten and the project's topics are deleted. |
 | `409` | The workspace is not opted in at stage `build` or later (or topics are off), or the project has no `topic_projects` row or a run in flight. Nothing changed. The body's message says which. |
 
+### Recovering a bad list
+
+A first build can save a bad list, for example with topic names on the wrong groups. To build it again, reset the list.
+The next discovery run, planned or by hand, builds a new one.
+
+- **One project:** the project reset above.
+- **Many projects:** the workspace reset below.
+
+The workspace reset forgets the lists of every project of the workspace that has one, `topics.storage.deleteBatchSize`
+projects per transaction:
+
+```bash
+curl -X POST "http://<opik-backend>:8080/v1/internal/topics/reset?workspace_id=<workspace_id>"
+```
+
+A project with a run in flight keeps its list. The answer lists it, so reset it again after its run ends. The same
+opt-in and stage rules apply as for the project reset.
+
+| Answer | Meaning |
+|---|---|
+| `200` | The body is `{"reset": <lists reset>, "skipped_in_flight": <projects skipped>, "in_flight_project_ids": [...]}`. |
+| `409` | The workspace is not opted in at stage `build` or later, or topics are off. Nothing changed. |
+
+What stays after a reset:
+
+- The row's run state and its `backfill_*` columns.
+- The project's `trace_topics` rows. The new run writes a newer row for each trace in its window. A trace outside the
+  new window keeps its old row, whose topic is gone, so it counts under Other.
+
+After a deploy that fixes the author prompt, call the workspace reset for each opted-in workspace, and again for the
+projects the answer lists as in flight, once their runs end. The fixed prompt is a new prompt, so opik-inference's
+cache does not answer it with the old list.
+
 ### Discovery runs and the vectors backfill
 
 When a workspace is opted in, the topic vectors tick embeds the traces it already has in a backfill, project by
@@ -773,6 +806,54 @@ ORDER BY backfill_started_at;
 To build the project anyway, call the endpoint with `&ignore_backfill=true` (see "Running by hand"). The list is then
 made only from the traces that have a vector now, so its topics can miss what the other traces are about.
 
+### Watching the vectors tick
+
+Every later stage reads the vectors this tick writes: the discovery run, topic on arrival and the nightly update. The
+leader pod ticks every `TOPICS_VECTORS_TICK_INTERVAL` (`1m`). Read the counters with `sum` across pods.
+
+| Metric | Meaning |
+|---|---|
+| `topics.vectors.ticks` by `outcome` | Job firings per pod: `ran`, `not_due`, `lock_held`, `failed`. Across the cluster, about one `ran` per interval. No `ran` means no pod ticks; `failed` logs ERROR `Topic vectors tick failed`. |
+| `topics.vectors.written_total` | Vectors written. Flat while ai-labels writes summaries means no new vectors. |
+| `topics.vectors.skipped_total` by `reason` | Traces a tick found but did not write: `embed_failed`, `embed_refused`, `invalid_vector`, `over_budget`, `insert_failed`. A later tick finds them again. |
+| `topics.vectors.embed.failures_total` by `http_status`, `code`, `error_type` | Failed embed calls; `http_status` 0 means no response. |
+| `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. Near `TOPICS_VECTORS_EMBED_TIMEOUT` means the embed pool is the bottleneck. |
+| `topics.vectors.read.failures_total` by `phase`, `error_type` | Failed ClickHouse reads: `find` (a workspace read), `discover` (a project discovery), `backfill` (a project read). The read runs again next tick. |
+| `topics.vectors.read.narrowed_total` by `workspace` | Fresh workspace reads over a find guard (`TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` or `..._MAX_MEMORY_USAGE`), read again over the older half of their status span, halved down to 1 minute. The tick writes that part and moves on, and the next tick reads from there. Logs WARN `Topic vectors window read over its guard, reading the statuses up to ...`. A read still over the guard at 1 minute counts in `read.failures_total`. |
+| `topics.vectors.workspaces_not_read_total` by `reason` | Workspaces a tick did not read: `budget` or `over_excluded`. |
+| `topics.vectors.discoveries_total` by `outcome` | See "Discovery runs and the vectors backfill". |
+| `topics.vectors.long_window.missed_total` | Vectors the daily pass wrote for statuses the fresh phase missed. Should stay near zero. |
+| `topics.vectors.tick.phase_seconds` by `phase` | Time per phase: `discover`, `find`, `embed`, `backfill`. Their sum near `TOPICS_VECTORS_TICK_BUDGET` (`50s`) means the tick runs out of time. |
+
+The Prometheus names replace the dots with underscores. ClickHouse queries of the tick have a `log_comment` that starts
+with `topics:`.
+
+#### The embed service fails or is down
+
+What on-call sees:
+
+- `topics.vectors.embed.failures_total` grows, and `topics.vectors.skipped_total` with `reason = embed_failed`.
+- WARN `Topic embed failed, workspace '<id>', code '<code>', status '<status>', traces '<n>'; no more calls for it this
+  tick`. A refusal of the inputs logs ERROR `Topic embed rejected inputs` instead and counts `embed_refused`.
+- `topics.vectors.written_total` goes flat.
+
+What happens:
+
+- No new vectors: new traces get no arrival row, the discovery runs wait (`vectors_in_window` stops growing and the
+  backfills do not drain), and a nightly update sees only the traces with a vector.
+- Nothing is lost while the outage is shorter than `TOPICS_VECTORS_WINDOW` (`24h`). Each workspace's watermark stops
+  at its first trace not written, and the ticks after the outage go on from there, up to
+  `TOPICS_VECTORS_MAX_TRACES_PER_TICK` per workspace per tick.
+- Statuses older than that window are left to the daily pass, once per `TOPICS_VECTORS_LONG_WINDOW_INTERVAL` (`1d`),
+  over `TOPICS_VECTORS_LONG_WINDOW` (`7d`). Statuses older than that are never embedded.
+
+What to do:
+
+1. Check opik-inference's embed pool and its errors.
+2. After it recovers, watch `topics.vectors.written_total` rise and `skipped_total{reason="embed_failed"}` stop.
+3. For an outage longer than `TOPICS_VECTORS_WINDOW`, expect `topics.vectors.long_window.missed_total` to rise on the
+   next daily pass of each workspace.
+
 ### What to watch
 
 Every metric of one workspace's work has `workspace_id` and `workspace_name` (the name falls back to the id). Runs
@@ -785,7 +866,7 @@ move between pods, so read the counters with `sum` across pods.
 | `topics.label.passes` by `trigger`, `outcome` | Labelling passes. |
 | `topics.llm.calls` by `call`, `outcome` | `call` is `author`; `outcome` is `ok`, `timeout`, `error`, `bad_answer`. |
 | `topics.save.rows` by `table` | Rows saved runs wrote. |
-| `topics.trace_topics.inserts` by `outcome` | `trace_topics` inserts after a save and per labelling page: `ok`, or `failed` after the retries. |
+| `topics.trace_topics.inserts` by `result` | `trace_topics` inserts after a save and per labelling page: `success`, or `error` after the retries. |
 | `topics.run.other_share` | The Other share of each saved run (its `stats.other_share`). No threshold is set. |
 
 A failed window count logs a WARN (`Topics window count failed`) with the workspace. The planner then counts
@@ -807,10 +888,13 @@ When that fails, `TopicsSweepJob` (every `TOPICS_STORAGE_SWEEP_INTERVAL` on each
 its topics, and the vectors tick deletes its `topic_projects` row. A save that commits after its project was deleted
 deletes its own topics. Deleting a workspace does not delete its MySQL rows, as for `ai_labels`.
 
-Topic on arrival (see "Topic on arrival") writes rows only for traces whose vectors the tick's deleted-trace check saw
-live. A trace deleted between that check and the arrival insert can still get an arrival row after the delete
-cascade. The row holds ids only, no reader counts it (every reader of `trace_topics` takes only traces that exist), and
-retention removes it.
+A run and its labelling pass read their window minutes before they insert. After each of their `trace_topics`
+inserts, the rows of traces that have no summary vector left are deleted: the delete cascade deletes vectors before
+`trace_topics`, so a trace deleted in between loses the rows written for it. This logs INFO `Deleted the trace_topics
+rows of traces deleted since they were read`. If the check fails, the insert still counts as done and logs WARN
+`Topics could not check a trace_topics insert for deleted traces`. Topic on arrival (see "Topic on arrival") inserts
+seconds after it reads the vectors and skips this check: a trace deleted in that gap can keep its arrival row. Such a
+row holds ids only, readers skip traces that do not exist, and retention removes it.
 
 ## Topics nightly updates
 
@@ -853,6 +937,7 @@ example `<workspace_id>:arrival` (a deploy). Its saved list stays as it is.
 |---|---|
 | `topics.nightly.decisions` by `decision`, `reason` | Projects the night decided on: `update`, `skip` (with `reason`), `not_reached`, `count_failed`. |
 | `topics.nightly.nights` by `outcome` | `finished` once per night, after its budget; `failed` for each plan whose read failed, for every workspace or for one. |
+| `topics.nightly.degraded_calls` by `call`, `error_code` | LLM calls of a saved nightly update that failed: `call` is `naming` or `verify`, `error_code` is `llm_timeout` or `llm_error`. Their candidates stay in Other until a later night. Growing across many projects means opik-inference is slow or down; the lists stop changing but the nights still save. |
 
 ### What a nightly update does
 
@@ -863,15 +948,21 @@ does) and the saved list, then:
 1. Assigns every trace it read to its nearest prototype at `TOPICS_ALGORITHM_ASSIGN_MIN_COSINE` (default 0.75), with
    the `TOPICS_ALGORITHM_OTHER_GATE` (0.95) gate on known Other: a topic, known Other, or unassigned.
 2. Groups the Other traces by k-means when they number `TOPICS_ALGORITHM_NIGHTLY_MIN_CANDIDATE` (20) or more. A group
-   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (2%) of the window or more.
+   of that size is a candidate; it is big at `TOPICS_ALGORITHM_NIGHTLY_BIG_SHARE` (1%) of the window or more.
 3. Makes one `naming` call (task `topics/tasks/naming.yaml`) for the candidates at
-   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.80) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
+   `TOPICS_ALGORITHM_NIGHTLY_MIN_TIGHTNESS` (0.77) or tighter; a night with none makes no call. The answer gives a candidate to a topic, puts candidates into a
    new topic, or sends them to Other. Candidates given to a topic are checked by one `verify_naming` call
    (`verify.yaml`); the rejected ones go to one `naming_new` call (`naming_new.yaml`), which offers a new topic or
    Other only. A new topic is born only at the big share; on a full list (`TOPICS_ALGORITHM_MAX_TOPICS`, 10) it replaces
-   the topic with the lowest share, if that share is below its own. An answer that is not a JSON object leaves its
-   candidates in Other and the run goes on. A call that fails or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
-   `TOPICS_RUN_VERIFY_DEADLINE` fails the run, and the list stays as it was.
+   the topic with the lowest share, if that share is below its own. A naming answer that is not a JSON object leaves
+   its candidates in Other and the run goes on; a verify answer that is not one is handled as a failed verify call. A
+   call that errors or runs out of `TOPICS_RUN_NAMING_DEADLINE` /
+   `TOPICS_RUN_VERIFY_DEADLINE` does not fail the run either: the candidates it was deciding stay in Other tonight
+   (`forced.other_failed`), and a failed verify does not send its candidates to `naming_new`. They are not kept as
+   known Other, so the next night offers them again. The run goes on to step 4 and saves, so it does not count toward
+   the pause. It logs a WARN (`Topics run '<run_id>' call '<call>' failed`), lists the call and its error code in
+   `stats.degraded_calls`, and counts it in `topics.nightly.degraded_calls`. An answer that breaks the schema still
+   fails the run with `llm_bad_answer`, and the list stays as it was.
 4. Assigns every trace again. A topic with no trace retires that night; a topic under `TOPICS_ALGORITHM_RETIRE_SHARE`
    (0.5%) for `TOPICS_ALGORITHM_RETIRE_NIGHTS` (3) saved nights in a row retires (`low_share`). A topic replaced on a
    full list retires as `replaced`. A retired topic does not come back: its theme is born again with a new id.
@@ -882,8 +973,8 @@ trace text and are never logged. When every topic retires, the save clears the l
 plans give the project a discovery run.
 
 The run's `saved` or `failed` line holds its `stats`: `mode`, `saved_runs_before`, `topics_before`, `unassigned`,
-`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`, and the
-churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
+`candidates`, `big`, `forced` (candidates by outcome), `born`, `retired`, `other_prototypes`, `llm_calls`,
+`degraded_calls` (each failed call's `call` and `error_code`, only on a night that had one), and the churn. `churn_any` is the share of traces whose label changed from the list saved before, Other included; `churn` is
 the same over the traces in a topic both before and after. Prompts and answers are logged only as length and SHA-256;
 each call's request id is `<run_id>:<call>` in opik-inference's logs.
 

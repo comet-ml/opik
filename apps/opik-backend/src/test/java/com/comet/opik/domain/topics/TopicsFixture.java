@@ -65,8 +65,8 @@ final class TopicsFixture {
 
     /**
      * The expected answer, {@code {topics: [{name, definition, clusters}], other}}, as the per-cluster answer
-     * {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}: each topic's clusters in topic order, then
-     * the {@code other} clusters as -1.
+     * {@code {topics: [{name, definition}], assignment: [{cluster, topic}]}}: each topic's clusters in topic order with
+     * its name, then the {@code other} clusters as "-1".
      */
     static JsonNode assignment(JsonNode answer) {
         var out = MAPPER.createObjectNode();
@@ -77,11 +77,11 @@ final class TopicsFixture {
             topics.addObject().put("name", topic.get("name").asText())
                     .put("definition", topic.get("definition").asText());
             for (var cluster : topic.get("clusters")) {
-                assignment.addObject().put("cluster", cluster.asInt()).put("topic", t);
+                assignment.addObject().put("cluster", cluster.asInt()).put("topic", topic.get("name").asText());
             }
         }
         for (var cluster : answer.get("other")) {
-            assignment.addObject().put("cluster", cluster.asInt()).put("topic", -1);
+            assignment.addObject().put("cluster", cluster.asInt()).put("topic", AuthorAnswer.OTHER);
         }
         return out;
     }

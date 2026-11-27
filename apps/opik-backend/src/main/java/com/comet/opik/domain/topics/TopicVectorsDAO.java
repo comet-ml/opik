@@ -84,6 +84,13 @@ public class TopicVectorsDAO {
      * {@code done} only: the other sides are joined to its keys. A slice, {@code trace_created_at < :created_before}:
      * half-open slices put each key in exactly one of them; a slice also bounds {@code id_at} from above by
      * {@code done}'s newest trace id, so an old slice does not read the outputs and vectors of every newer trace.
+     *
+     * <p>An as-of read ({@link TopicVectorsFind#asOf}) also bounds {@code done}'s statuses by {@code :upper_bound} before
+     * the dedup, and {@code id_at} from above as a slice does: the tick's read narrowed after a size guard, whose cost
+     * then follows its status span. This is the one read that filters {@code updated_at} from above before the dedup,
+     * on purpose: each trace takes its newest status at or before the bound, so the read returns what a plain read at
+     * that time would have, and the watermark moves only to the bound. A status written after the bound is read by a
+     * later tick; a vector is keyed by its task version, so that read writes nothing twice.
      */
     private static final String FIND_UNVECTORED = """
             WITH done AS (
@@ -98,6 +105,7 @@ public class TopicVectorsDAO {
                     AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
                     <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
                     AND updated_at >= parseDateTime64BestEffort(:lower_bound, 6, 'UTC')
+                    <if(as_of)>AND updated_at \\<= parseDateTime64BestEffort(:upper_bound, 6, 'UTC')<endif>
                     ORDER BY workspace_id, project_id, task, trace_id, updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id
                 )
@@ -114,7 +122,7 @@ public class TopicVectorsDAO {
                     AND task = :task
                     AND key = 'output'
                     AND id_at >= tupleElement(<id_at_bounds>, 1)
-                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
+                    <if(id_at_upper)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     AND (project_id, trace_id) IN (SELECT project_id, trace_id FROM done)
                     ORDER BY workspace_id, project_id, task, trace_id, key, updated_at DESC, task_version DESC, output DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, key
@@ -135,7 +143,7 @@ public class TopicVectorsDAO {
                     AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
                     <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
                     AND id_at >= tupleElement(<id_at_bounds>, 1)
-                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
+                    <if(id_at_upper)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
                 )
@@ -152,7 +160,7 @@ public class TopicVectorsDAO {
                     AND trace_created_at >= parseDateTime64BestEffort(:created_after, 6, 'UTC')
                     <if(created_before)>AND trace_created_at \\< parseDateTime64BestEffort(:created_before, 6, 'UTC')<endif>
                     AND id_at >= tupleElement(<id_at_bounds>, 1)
-                    <if(created_before)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
+                    <if(id_at_upper)>AND id_at \\<= tupleElement(<id_at_bounds>, 2)<endif>
                     ORDER BY workspace_id, project_id, task, trace_id, task_version, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, task, trace_id, task_version
                 )
@@ -356,14 +364,16 @@ public class TopicVectorsDAO {
         var projectId = find.projectId();
         var excludedProjectIds = find.excludedProjectIds();
         var template = guarded(FIND_UNVECTORED, "topics:find_unvectored", workspaceId,
-                "lower_bound=%s, created_after=%s, created_before=%s, project_id=%s, excluded=%d, limit=%d".formatted(
-                        find.lowerBound(), find.createdAfter(), createdBefore, projectId, excludedProjectIds.size(),
-                        find.limit()),
+                "lower_bound=%s, created_after=%s, created_before=%s, project_id=%s, excluded=%d, limit=%d, as_of=%s"
+                        .formatted(find.lowerBound(), find.createdAfter(), createdBefore, projectId,
+                                excludedProjectIds.size(), find.limit(), find.asOf() ? find.upperBound() : null),
                 find.maxExecutionSeconds())
                 .add("id_at_bounds", ID_AT_BOUNDS)
                 .add("project", projectId != null)
                 .add("excluded", !excludedProjectIds.isEmpty())
-                .add("created_before", createdBefore != null);
+                .add("created_before", createdBefore != null)
+                .add("as_of", find.asOf())
+                .add("id_at_upper", createdBefore != null || find.asOf());
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     var statement = connection.createStatement(template.render())

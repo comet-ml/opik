@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -43,7 +44,7 @@ import static org.assertj.core.api.Assertions.within;
 @DisplayName("topics nightly update: rules")
 class TopicsNightlyRulesTest {
 
-    private static final AlgorithmConfig CONFIG = TopicsTestAlgorithm.config();
+    private static final AlgorithmConfig CONFIG = rulesConfig();
     private static final TopicTasks TASKS = new TopicTasks();
 
     private static final LocalDate DISCOVERY = LocalDate.parse("2026-10-01");
@@ -70,7 +71,7 @@ class TopicsNightlyRulesTest {
         @Test
         @DisplayName("one call for every pair; a missing or out-of-range pair is not verified")
         void answers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> {
                         assertThat(tag).isEqualTo("verify_naming");
                         assertThat(maxTokens).isEqualTo(60 + 25 * 2);
@@ -81,32 +82,27 @@ class TopicsNightlyRulesTest {
                                 """);
                     });
 
-            assertThat(verdicts).containsOnly(Map.entry(0, false));
+            assertThat(verdicts).hasValueSatisfying(map -> assertThat(map).containsOnly(Map.entry(0, false)));
         }
 
         @Test
-        @DisplayName("a failed call fails the run: read as 'no pair verified', it would turn sound assigns into new topics")
+        @DisplayName("a failed call and an answer that is not a JSON object give no verdicts")
         void failed() {
-            assertThatThrownBy(
-                    () -> drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
-                            (tag, prompt, schema, maxTokens) -> {
-                                throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
-                            }))
-                    .isInstanceOfSatisfying(TopicsRunException.class,
-                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_TIMEOUT));
+            assertThat(verdicts(failing(RunError.LLM_TIMEOUT))).isEmpty();
+            assertThat(verdicts((tag, prompt, schema, maxTokens) -> null)).isEmpty();
         }
 
         @Test
         @DisplayName("a pair answered both ways is not verified; a pair answered twice the same way is")
         void conflictingAnswers() {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> json(
                             """
                                     {"answers": [{"pair": 0, "same": true}, {"pair": 1, "same": true}, {"pair": 0, "same": false},
                                     {"pair": 1, "same": true}]}
                                     """));
 
-            assertThat(verdicts).containsOnly(Map.entry(1, true));
+            assertThat(verdicts).hasValueSatisfying(map -> assertThat(map).containsOnly(Map.entry(1, true)));
         }
 
         @ParameterizedTest(name = "{0}")
@@ -114,12 +110,18 @@ class TopicsNightlyRulesTest {
                 "a number|, \"same\": 1"})
         @DisplayName("a same that is missing or not a boolean does not verify the pair")
         void sameNotBoolean(String label, String same) {
-            var verdicts = drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG),
+            var verdicts = verdicts(
                     (tag, prompt, schema, maxTokens) -> json(
                             "{\"answers\": [{\"pair\": 0" + (same == null ? "" : same)
                                     + "}, {\"pair\": 1, \"same\": true}]}"));
 
-            assertThat(verdicts).containsOnly(Map.entry(1, true));
+            assertThat(verdicts).hasValueSatisfying(map -> assertThat(map).containsOnly(Map.entry(1, true)));
+        }
+
+        /** The verdicts of one verify call over {@link #pairs}; empty when the call goes to its failed path. */
+        private Optional<Map<Integer, Boolean>> verdicts(NightLlm llm) {
+            return drive(Verifier.ask("verify_naming", pairs, TASKS.verify(), CONFIG,
+                    map -> NightStep.done(Optional.of(map)), () -> NightStep.done(Optional.empty())), llm);
         }
     }
 
@@ -1194,27 +1196,143 @@ class TopicsNightlyRulesTest {
     }
 
     @Nested
-    @DisplayName("a failed naming call")
-    class FailedNaming {
+    @DisplayName("a failed call")
+    class FailedCalls {
 
         @Test
-        @DisplayName("fails the run, so a full list's weakest topic is not retired for nothing")
-        void failsTheRun() {
+        @DisplayName("a failed naming call leaves its groups in Other and out of the memory: the night is the one with no "
+                + "candidate, and the next night names them")
+        void naming() {
+            var state = withMemory();
+            var quiet = withMemory();
+            var noCandidates = TopicsTestAlgorithm.config();
+            noCandidates.setNightlyMinCandidate(Integer.MAX_VALUE);
+            var window = window(three(20, 40, 40));
+
+            var result = drive(NightlyUpdate.run(state, window, 10, CONFIG, TASKS), failing(RunError.LLM_ERROR));
+            var expected = drive(NightlyUpdate.run(quiet, window, 10, noCandidates, TASKS), NO_LLM);
+
+            assertThat(result.candidates()).hasSize(2);
+            assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
+                    .containsOnly(ForcedBirth.Result.OTHER_FAILED);
+            assertThat(result.groupMap()).containsOnlyKeys(result.candidates())
+                    .allSatisfy((group, topic) -> assertThat(topic).isEqualTo(TopicAlgorithm.OTHER));
+            assertSameNight(state, result, quiet, expected);
+            assertThat(state.getOtherPrototypes()).containsExactly(SOUTH);
+
+            var next = drive(NightlyUpdate.run(state, window, 10, CONFIG, TASKS),
+                    named(Map.of("naming", newTopics("{\"name\": \"Both\", \"definition\": \"B.\", "
+                            + "\"clusters\": [0, 1]}"))));
+
+            assertThat(next.forced()).extracting(ForcedBirth.Outcome::result)
+                    .containsOnly(ForcedBirth.Result.BORN);
+            assertThat(state.topic(1).getName()).isEqualTo("Both");
+            assertThat(Arrays.stream(next.labels()).filter(label -> label == 1).count()).isEqualTo(80);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"a failed verify call", "a verify answer that is not a JSON object"})
+        @DisplayName("a failed verify call, or a verify answer that is not a JSON object, leaves the groups it checked "
+                + "in Other and out of the memory; they do not go to the second naming call, and the topic they were "
+                + "given keeps its prototypes")
+        void verify(String verify) {
+            var state = state(1, topic("East", EAST), topic("North", NORTH));
+            var tags = new ArrayList<String>();
+            var llm = named(Map.of("naming", ASSIGN_BOTH_TO_NORTH), tags);
+
+            var result = drive(NightlyUpdate.run(state, window(Night.twoSmall()), 10, CONFIG, TASKS),
+                    (tag, prompt, schema, maxTokens) -> {
+                        if (tag.equals("verify_naming")) {
+                            tags.add(tag);
+                            if (verify.equals("a failed verify call")) {
+                                throw new TopicsRunException(RunError.LLM_TIMEOUT, "timeout");
+                            }
+                            return null;
+                        }
+                        return llm.generate(tag, prompt, schema, maxTokens);
+                    });
+
+            assertThat(tags).containsExactly("naming", "verify_naming");
+            assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
+                    .containsExactly(ForcedBirth.Result.OTHER_FAILED, ForcedBirth.Result.OTHER_FAILED);
+            assertThat(result.groupMap()).containsOnly(Map.entry(0, TopicAlgorithm.OTHER),
+                    Map.entry(1, TopicAlgorithm.OTHER));
+            assertThat(state.topic(1).getPrototypes()).containsExactly(NORTH);
+            assertThat(state.getOtherPrototypes()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a failed second naming call leaves the groups the verify rejected in Other and out of the memory")
+        void namingNew() {
+            var state = state(1, topic("East", EAST), topic("North", NORTH));
+            var tags = new ArrayList<String>();
+            var llm = named(Map.of("naming", ASSIGN_BOTH_TO_NORTH, "verify_naming",
+                    "{\"answers\": [{\"pair\": 0, \"same\": false}, {\"pair\": 1, \"same\": false}]}"), tags);
+
+            var result = drive(NightlyUpdate.run(state, window(Night.twoSmall()), 10, CONFIG, TASKS),
+                    (tag, prompt, schema, maxTokens) -> {
+                        if (tag.equals("naming_new")) {
+                            tags.add(tag);
+                            throw new TopicsRunException(RunError.LLM_ERROR, "down");
+                        }
+                        return llm.generate(tag, prompt, schema, maxTokens);
+                    });
+
+            assertThat(tags).containsExactly("naming", "verify_naming", "naming_new");
+            assertThat(result.forced()).extracting(ForcedBirth.Outcome::result)
+                    .containsExactly(ForcedBirth.Result.OTHER_FAILED, ForcedBirth.Result.OTHER_FAILED);
+            assertThat(state.live()).containsExactly(0, 1);
+            assertThat(state.topic(1).getPrototypes()).containsExactly(NORTH);
+            assertThat(state.getOtherPrototypes()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a failed naming call on a full list retires no topic for its groups")
+        void fullList() {
             var live = new ArrayList<NightTopic>();
             for (int i = 0; i < 10; i++) {
                 live.add(topic("T" + i));
             }
             var state = state(0, live.toArray(NightTopic[]::new));
             var map = new LinkedHashMap<Integer, Integer>();
-            NightLlm failing = (tag, prompt, schema, maxTokens) -> {
-                throw new TopicsRunException(RunError.LLM_ERROR, "down");
-            };
 
-            assertThatThrownBy(() -> force(state, List.of(group(0, 60, 0.95, 0.9)), topics(state), map, 10, failing))
-                    .isInstanceOfSatisfying(TopicsRunException.class,
-                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_ERROR));
+            var outcomes = force(state, List.of(group(0, 60, 0.95, 0.9)), topics(state), map, 10,
+                    failing(RunError.LLM_ERROR));
+
+            assertThat(outcomes).containsExactly(new ForcedBirth.Outcome(0, ForcedBirth.Result.OTHER_FAILED, null));
             assertThat(state.liveCount()).isEqualTo(10);
-            assertThat(map).isEmpty();
+            assertThat(map).containsOnly(Map.entry(0, TopicAlgorithm.OTHER));
+        }
+
+        @Test
+        @DisplayName("an answer that breaks the schema still fails the run")
+        void badAnswerFails() {
+            assertThatThrownBy(() -> drive(NightlyUpdate.run(withMemory(), window(three(20, 40, 40)), 10, CONFIG,
+                    TASKS), failing(RunError.LLM_BAD_ANSWER)))
+                    .isInstanceOfSatisfying(TopicsRunException.class,
+                            exception -> assertThat(exception.getCode()).isEqualTo(RunError.LLM_BAD_ANSWER));
+        }
+
+        private static final String ASSIGN_BOTH_TO_NORTH = "{\"assign\": [{\"cluster\": 0, \"topic\": 2}, "
+                + "{\"cluster\": 1, \"topic\": 2}], \"new\": [], \"other\": []}";
+
+        /** East live, South known Other. */
+        private static NightState withMemory() {
+            var state = state(1, topic("East", EAST));
+            state.setOtherPrototypes(List.of(SOUTH));
+            return state;
+        }
+
+        private static void assertSameNight(NightState state, NightlyUpdate.Result result, NightState quiet,
+                NightlyUpdate.Result expected) {
+            assertThat(result.labels()).containsExactly(expected.labels());
+            assertThat(state.live()).containsExactly(quiet.live());
+            assertThat(state.getOtherPrototypes()).containsExactlyElementsOf(quiet.getOtherPrototypes());
+            for (int t = 0; t < state.getTopics().size(); t++) {
+                assertThat(state.topic(t).getPrototypes()).containsExactlyElementsOf(quiet.topic(t).getPrototypes());
+                assertThat(state.topic(t).getLowNights()).isEqualTo(quiet.topic(t).getLowNights());
+                assertThat(state.topic(t).getSize()).isEqualTo(quiet.topic(t).getSize());
+            }
         }
     }
 
@@ -1231,6 +1349,14 @@ class TopicsNightlyRulesTest {
                 .definition(RandomStringUtils.secure().nextAlphanumeric(30))
                 .born(discoveredOn)
                 .prototypes(List.of());
+    }
+
+    // The fixtures put loose groups at tightness 0.79 and small ones at 1% of the window, just under these bars.
+    private static AlgorithmConfig rulesConfig() {
+        var config = TopicsTestAlgorithm.config();
+        config.setNightlyMinTightness(0.80);
+        config.setNightlyBigShare(0.02);
+        return config;
     }
 
     private static NightState state(int rebuilds, NightTopic... topics) {
@@ -1326,12 +1452,32 @@ class TopicsNightlyRulesTest {
         JsonNode generate(String tag, String prompt, JsonNode schema, int maxTokens);
     }
 
-    /** Answers each ask of {@code step} with {@code llm}, as the run service does, until the step is done. */
+    /**
+     * Answers each ask of {@code step} with {@code llm}, as the run service does, until the step is done: a call that
+     * times out or errors takes the ask's failed path, any other failure ends the night.
+     */
     private static <T> T drive(NightStep<T> step, NightLlm llm) {
-        while (step instanceof NightStep.Ask<T>(var request, var next)) {
-            step = next.apply(llm.generate(request.tag(), request.prompt(), request.schema(), request.maxTokens()));
+        while (step instanceof NightStep.Ask<T>(var request, var next, var failed)) {
+            JsonNode answer;
+            try {
+                answer = llm.generate(request.tag(), request.prompt(), request.schema(), request.maxTokens());
+            } catch (TopicsRunException exception) {
+                if (exception.getCode() != RunError.LLM_TIMEOUT && exception.getCode() != RunError.LLM_ERROR) {
+                    throw exception;
+                }
+                step = failed.get();
+                continue;
+            }
+            step = next.apply(answer);
         }
         return ((NightStep.Done<T>) step).result();
+    }
+
+    /** An LLM whose every call fails with {@code code}. */
+    private static NightLlm failing(RunError code) {
+        return (tag, prompt, schema, maxTokens) -> {
+            throw new TopicsRunException(code, "down");
+        };
     }
 
     /** A grouped naming answer with these {@code new} entries and no assign. */

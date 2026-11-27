@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -95,7 +96,8 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             .flatMap(workspace -> run(message, deadline)
                                     .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspace.id())
                                             .put(RequestContext.WORKSPACE_NAME, workspace.name())
-                                            .put(RequestContext.USER_NAME, RUN_USER)))
+                                            .put(RequestContext.USER_NAME, RUN_USER))
+                                    .onErrorResume(error -> failUnexpected(message, workspace, error)))
                             .takeUntilOther(stopped(message))
                             // A backstop: the run ends itself by its deadline, and the planner cancels it after.
                             .timeout(limit.plus(config.getRuns().getAbandonGrace().toJavaDuration()),
@@ -114,6 +116,22 @@ public class TopicsRunSubscriber extends BaseRedisSubscriber<TopicsRunMessage> {
                             message.runId(), message.projectId(), error);
                     return Mono.empty();
                 })
+                .then()
+                // The stream's onErrorContinue would otherwise reach up into the run: an error thrown in a map drops
+                // the element, the run completes empty and its row stays running until the planner abandons it.
+                .onErrorStop();
+    }
+
+    /**
+     * An error the run did not record itself (a discovery run or nightly update records its own): ends the row
+     * {@code internal} at once. Logs the error's types only, as a message can quote trace text.
+     */
+    private Mono<Void> failUnexpected(TopicsRunMessage message, TopicsMetrics.Workspace workspace, Throwable error) {
+        return store.fail(message.runId(), workspace, message.projectId(), RunError.INTERNAL)
+                .doOnNext(marked -> log.warn("Topics run '{}' failed, project '{}', mode '{}', code '{}', marked '{}', "
+                        + "errors '{}'", message.runId(), message.projectId(), message.mode().getValue(),
+                        RunError.INTERNAL.getValue(), marked,
+                        ExceptionUtils.getThrowableList(error).stream().map(TopicsErrors::formatError).toList()))
                 .then();
     }
 

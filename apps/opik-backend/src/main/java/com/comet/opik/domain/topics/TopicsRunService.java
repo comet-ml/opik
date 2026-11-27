@@ -10,6 +10,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * One project's discovery run, as one reactive flow: read the window ({@link TopicWindowReader}), cluster it, make the
@@ -239,8 +241,11 @@ public class TopicsRunService {
 
     /**
      * One nightly update of {@code state} over {@code window}, changed in place: the algorithm's steps, and each LLM
-     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null; a
-     * failed call errors with its code and ends the night. The result's stats are the night's with its calls' added.
+     * call they ask for through {@link TopicsLlm}, with that call's deadline. The steps run on {@code parallel()}. An
+     * answer that is not a JSON object counts as {@code bad_answer} and reaches the algorithm as null. A call that
+     * times out or errors takes the step's {@link NightStep.Ask#failed} path: the night goes on without it, and the
+     * stats list it under {@code degraded_calls}. An answer that breaks the schema errors with its code and ends the
+     * night. The result's stats are the night's with its calls' added.
      */
     Mono<TopicUpdate> update(@NonNull TopicRun run, @NonNull NightState state, @NonNull NightWindow window) {
         return cpu(run, "update", () -> algorithm.update(state, window, config.getAlgorithm().getMaxTopics()))
@@ -257,9 +262,42 @@ public class TopicsRunService {
             }
             case NightStep.Ask<TopicUpdate> ask ->
                 timed(run, "llm", llm.generate(run, ask.request(), NightJson::object))
-                        .flatMap(answer -> cpu(run, "update", () -> ask.next().apply(answer.value()))
-                                .flatMap(next -> night(run, next, plus(calls, answer.stats()))));
+                        .map(answer -> Called.builder()
+                                .next(() -> ask.next().apply(answer.value()))
+                                .calls(plus(calls, answer.stats()))
+                                .build())
+                        .onErrorResume(TopicsRunService::isFailedCall, error -> Mono.just(Called.builder()
+                                .next(ask.failed())
+                                .calls(degraded(run, ask.request(), (TopicsRunException) error, calls))
+                                .build()))
+                        .flatMap(called -> cpu(run, "update", called.next()::get)
+                                .flatMap(next -> night(run, next, called.calls())));
         };
+    }
+
+    /** After one call: the night's next step, and the calls' stats so far. */
+    @Builder(toBuilder = true)
+    private record Called(@NonNull Supplier<NightStep<TopicUpdate>> next, @NonNull ObjectNode calls) {
+    }
+
+    /** A call that timed out or errored; a bad answer and any other failure still end the night. */
+    private static boolean isFailedCall(Throwable error) {
+        return error instanceof TopicsRunException failure
+                && (failure.getCode() == RunError.LLM_TIMEOUT || failure.getCode() == RunError.LLM_ERROR);
+    }
+
+    /** The calls' stats with one more entry under {@code degraded_calls}, after its WARN and its metric. */
+    private ObjectNode degraded(TopicRun run, LlmRequest call, TopicsRunException failure, ObjectNode calls) {
+        // The error types, not the exception: its causes can quote the answer, as for a failed run.
+        log.warn("Topics run '{}' call '{}' failed, project '{}', error code '{}', message '{}', errors '{}': the "
+                + "night goes on without it, its groups stay in Other until the next night", run.runId(), call.tag(),
+                run.projectId(), failure.getCode().getValue(), failure.getMessage(),
+                ExceptionUtils.getThrowableList(failure).stream().map(TopicsErrors::formatError).toList());
+        metrics.degradedCall(run.workspace(), call.call(), failure.getCode());
+        var stats = calls.deepCopy();
+        stats.withArray("degraded_calls").addObject().put("call", call.tag()).put("error_code",
+                failure.getCode().getValue());
+        return stats;
     }
 
     /**
@@ -290,7 +328,7 @@ public class TopicsRunService {
     private Mono<TopicRunOutcome> afterSave(TopicRun run, List<TraceTopic> traceTopics, double otherShare,
             ObjectNode stats) {
         metrics.otherShare(run.workspace(), otherShare);
-        return store.insertTraceTopics(run.workspace(), traceTopics)
+        return store.insertTraceTopicsAndDropDeleted(run.workspace(), traceTopics)
                 .thenReturn(traceTopics.size())
                 .onErrorResume(exception -> {
                     log.error("Topics run '{}' saved, but its trace_topics insert failed, project '{}'; the labelling "

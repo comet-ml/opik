@@ -303,6 +303,16 @@ public interface TopicProjectDAO {
             @Bind("savedAt") Instant savedAt, @Bind("windowUntil") Instant windowUntil,
             @Nullable @Bind("otherVectors") PrototypeVectors otherVectors, @Bind("embedModel") String embedModel);
 
+    /** The workspace's next {@code limit} projects with a saved list, by project id after {@code after}. */
+    @SqlQuery("""
+            SELECT workspace_id, project_id FROM topic_projects
+            WHERE workspace_id = :workspaceId AND list_run_id IS NOT NULL AND project_id > :after
+            ORDER BY project_id
+            LIMIT :limit
+            """)
+    List<TopicProjectKey> findLists(@Bind("workspaceId") String workspaceId, @Bind("after") String after,
+            @Bind("limit") int limit);
+
     /**
      * Forgets the project's saved list, so its next discovery run builds a new one. The run and backfill fields stay.
      * 0 when the project has no row, or its run is not in one of {@code ended}: a run in flight keeps the list.

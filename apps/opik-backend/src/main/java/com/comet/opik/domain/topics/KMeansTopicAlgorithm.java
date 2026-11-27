@@ -60,6 +60,15 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
                         + "topics.algorithm.nightlyVerifyTokensPerPair x nightlyMaxGroups) is above the limit, "
                         + "limit '%s', max_tokens '%s'",
                 BatchGenerateItem.MAX_MAX_TOKENS, verifyMaxTokens);
+        // The author answer lists every topic and names a topic for every group: a cut-off answer cannot be read, so
+        // every discovery run would end llm_bad_answer.
+        int authorAnswerTokens = config.getMaxTopics() * config.getAuthorTokensPerTopic()
+                + config.getMaxGroups() * config.getAuthorTokensPerGroup();
+        Preconditions.checkState(authorAnswerTokens <= tasks.author().effectiveMaxTokens(),
+                "the author answer's estimate (topics.algorithm.maxTopics x authorTokensPerTopic + maxGroups x "
+                        + "authorTokensPerGroup) is above the max_tokens of topics/tasks/author.yaml, max_tokens '%s', "
+                        + "estimate '%s'",
+                tasks.author().effectiveMaxTokens(), authorAnswerTokens);
     }
 
     @Override
@@ -176,6 +185,7 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
             var assigner = assigner(topicPrototypes, owners, otherPrototypes);
             var finishStats = JsonUtils.createObjectNode();
             finishStats.put("other_groups", applied.other().size());
+            finishStats.put("author_unmatched", answer.unmatched());
             finishStats.put("gated_other", assigner.gatedOther());
             // A gated known-Other prototype is not returned: the assigner leaves it out as long as the topic prototype
             // near it is saved, so it would assign no trace.
@@ -189,8 +199,9 @@ public class KMeansTopicAlgorithm implements TopicAlgorithm {
     }
 
     /**
-     * {@link NightlyUpdate} over the saved list. An answer that is not a JSON object (null) leaves its groups in Other;
-     * for the verify call, it verifies no pair.
+     * {@link NightlyUpdate} over the saved list. A naming answer that is not a JSON object (null) leaves its groups in
+     * Other. A failed call, and a verify answer that is not a JSON object, leave their groups in Other tonight only
+     * ({@code other_failed}).
      */
     @Override
     public NightStep<TopicUpdate> update(@NonNull NightState state, @NonNull NightWindow window, int maxTopics) {

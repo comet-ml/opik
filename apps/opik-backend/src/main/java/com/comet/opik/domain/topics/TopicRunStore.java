@@ -46,6 +46,7 @@ class TopicRunStore {
             .toList();
 
     private final TopicsConfig.RunConfig runConfig;
+    private final TopicsConfig.StorageConfig storageConfig;
     private final TransactionTemplate template;
     private final TraceTopicsDAO traceTopicsDAO;
     private final ProjectService projectService;
@@ -59,6 +60,7 @@ class TopicRunStore {
             @NonNull IdGenerator idGenerator, @NonNull TopicsMetrics metrics,
             @NonNull WorkspaceNameService workspaceNames) {
         this.runConfig = config.getRun();
+        this.storageConfig = config.getStorage();
         this.template = template;
         this.traceTopicsDAO = traceTopicsDAO;
         this.projectService = projectService;
@@ -427,7 +429,8 @@ class TopicRunStore {
     /**
      * Inserts {@code trace_topics} rows of a run, for the run itself or its labelling pass, or of topic on arrival. A
      * transient error is retried up to {@code topics.run.insertRetries} times (a repeat writes the same rows, one per
-     * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No rows, no insert.
+     * trace); any other fails at once. Each attempt stops after {@code topics.run.readTimeout}. Counted by result. No
+     * rows, no insert.
      */
     Mono<Void> insertTraceTopics(@NonNull TopicsMetrics.Workspace workspace, @NonNull List<TraceTopic> rows) {
         if (rows.isEmpty()) {
@@ -450,6 +453,38 @@ class TopicRunStore {
                 })
                 .doOnError(__ -> metrics.traceTopicsInsert(workspace, false))
                 .then();
+    }
+
+    /**
+     * {@link #insertTraceTopics}, then the rows of traces deleted since the run or its labelling pass read them are
+     * deleted ({@link TraceTopicsDAO#deleteRowsOfDeletedTraces}): those reads come minutes before the insert. Topic on
+     * arrival writes its rows seconds after it reads the vectors, under its own short timeout, so it inserts without
+     * this check.
+     */
+    Mono<Void> insertTraceTopicsAndDropDeleted(@NonNull TopicsMetrics.Workspace workspace,
+            @NonNull List<TraceTopic> rows) {
+        if (rows.isEmpty()) {
+            return Mono.empty();
+        }
+        return insertTraceTopics(workspace, rows)
+                .then(Mono.defer(() -> traceTopicsDAO.deleteRowsOfDeletedTraces(rows)
+                        .doOnNext(deleted -> {
+                            if (deleted > 0) {
+                                log.info("Deleted the trace_topics rows of traces deleted since they were read, "
+                                        + "source '{}', run '{}', workspace '{}', traces '{}'",
+                                        rows.getFirst().source().getValue(), rows.getFirst().runId(), workspace.id(),
+                                        deleted);
+                            }
+                        })
+                        .then()
+                        .onErrorResume(error -> {
+                            // The rows hold ids only, every reader takes only traces that exist, and retention
+                            // deletes them.
+                            log.warn("Topics could not check a trace_topics insert for deleted traces, source '{}', "
+                                    + "run '{}', project '{}'", rows.getFirst().source().getValue(),
+                                    rows.getFirst().runId(), rows.getFirst().projectId(), error);
+                            return Mono.empty();
+                        })));
     }
 
     /** The project's saved list: its row and its topics, read in one transaction so they are of the same save. */
@@ -514,6 +549,60 @@ class TopicRunStore {
                 return true;
             }));
         });
+    }
+
+    /**
+     * Forgets the saved lists of the workspace's projects, {@code topics.storage.deleteBatchSize} projects per
+     * transaction: each row as {@link #resetList}, then the topics of the rows that moved. A row that did not move and
+     * is still there after its batch commits has a run in flight: that project keeps its list and is returned as
+     * skipped.
+     */
+    Mono<WorkspaceReset> resetLists(@NonNull String workspaceId) {
+        int limit = storageConfig.getDeleteBatchSize();
+        return resetBatch(workspaceId, "", limit)
+                .expand(batch -> batch.next() == null ? Mono.empty() : resetBatch(workspaceId, batch.next(), limit))
+                .map(ResetBatch::reset)
+                .reduce(new WorkspaceReset(List.of(), List.of()),
+                        (total, batch) -> new WorkspaceReset(
+                                Stream.concat(total.reset().stream(), batch.reset().stream()).toList(),
+                                Stream.concat(total.inFlight().stream(), batch.inFlight().stream()).toList()));
+    }
+
+    /** A batch of the workspace reset, and the project id the next batch starts after; null after the last. */
+    private record ResetBatch(WorkspaceReset reset, String next) {
+    }
+
+    /** The rows a batch reset, those it did not, and the project id the next batch starts after. */
+    private record Moved(List<UUID> reset, List<UUID> unmoved, String next) {
+    }
+
+    private Mono<ResetBatch> resetBatch(String workspaceId, String after, int limit) {
+        return jdbi(() -> template.inTransaction(WRITE, handle -> {
+            var projectDAO = handle.attach(TopicProjectDAO.class);
+            var keys = projectDAO.findLists(workspaceId, after, limit);
+            var lists = keys.stream()
+                    .map(TopicProjectKey::projectId)
+                    .collect(Collectors.partitioningBy(
+                            projectId -> projectDAO.resetList(workspaceId, projectId, ENDED) == 1));
+            var reset = lists.get(true);
+            if (!reset.isEmpty()) {
+                handle.attach(TopicDAO.class).deleteTopicsByProjects(workspaceId, reset);
+            }
+            var next = keys.size() < limit ? null : keys.getLast().projectId().toString();
+            return new Moved(reset, lists.get(false), next);
+        })).flatMap(moved -> stillListed(workspaceId, moved.unmoved())
+                .map(inFlight -> new ResetBatch(new WorkspaceReset(moved.reset(), inFlight), moved.next())));
+    }
+
+    /** Those of {@code projectIds} whose row is still there after the batch committed: their run is in flight. */
+    private Mono<List<UUID>> stillListed(String workspaceId, List<UUID> projectIds) {
+        if (projectIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return jdbi(() -> template.inTransaction(READ_ONLY, handle -> handle.attach(TopicProjectDAO.class)
+                .findProjects(workspaceId, projectIds).stream()
+                .map(TopicProject::projectId)
+                .toList()));
     }
 
     /**

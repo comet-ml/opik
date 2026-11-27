@@ -37,6 +37,12 @@ import java.util.function.Supplier;
  * ({@link Result#OTHER_SMALL}). On a full list, the topic not born tonight with the lowest share of the window is
  * retired when that share is below the new topic's, else its groups are known Other; a topic's share here counts the
  * groups given to it tonight. A group the answers leave out is known Other.
+ * <p>
+ * A call that fails (timeout or error) leaves the groups it was deciding in Other tonight, not known Other
+ * ({@link Result#OTHER_FAILED}), so they are candidates again on the next night: the naming call's groups, the groups
+ * a failed verify was checking (they do not go to the second call, whose prompt says they belong to no live topic),
+ * and the second call's groups. A verify answer that is not a JSON object gives no verdicts either, so it counts as a
+ * failed verify.
  */
 @Slf4j
 @UtilityClass
@@ -151,7 +157,14 @@ class ForcedBirth {
                         ? assign(before, answer, prompt.topicOfId(), byTopic, byGroup, done)
                         : NightStep.done(new Assigned(before, List.of()));
                 return assigned.then(after -> named(after, answer, allowAssign, byTopic, byGroup, done));
-            });
+            }, () -> NightStep.done(failed(before, byGroup.keySet())));
+        }
+
+        /** {@code before}, with {@code groups} left in Other by a failed call. */
+        private static Named failed(Named before, Iterable<Integer> groups) {
+            var decided = new Decisions(before);
+            groups.forEach(group -> decided.put(group, TopicAlgorithm.OTHER, Result.OTHER_FAILED, null));
+            return decided.named();
         }
 
         /** The naming answer's new topics, then the second call over the rejected groups, then the groups left out. */
@@ -274,7 +287,7 @@ class ForcedBirth {
             if (pairs.isEmpty()) {
                 return NightStep.done(new Assigned(before, List.of()));
             }
-            return Verifier.ask(VERIFY_TAG, prompts, tasks.verify(), config).map(answers -> {
+            return Verifier.ask(VERIFY_TAG, prompts, tasks.verify(), config, answers -> {
                 var decided = new Decisions(before);
                 var rejected = new ArrayList<NightGroup>();
                 for (int n = 0; n < pairs.size(); n++) {
@@ -286,8 +299,9 @@ class ForcedBirth {
                         rejected.add(byGroup.get(group));
                     }
                 }
-                return new Assigned(decided.named(), List.copyOf(rejected));
-            });
+                return NightStep.done(new Assigned(decided.named(), List.copyOf(rejected)));
+            }, () -> NightStep.done(
+                    new Assigned(failed(before, pairs.stream().map(pair -> pair[0]).toList()), List.of())));
         }
     }
 
@@ -324,7 +338,9 @@ class ForcedBirth {
         OTHER_FULL,
         /** Named new, but under {@code nightlyBigShare}. */
         OTHER_SMALL,
-        OTHER_NAME
+        OTHER_NAME,
+        /** Its call failed: Other tonight, not known Other, so a candidate again on the next night. */
+        OTHER_FAILED
     }
 
     /** What happened to one candidate; {@code topic} is the index of the topic it got. */

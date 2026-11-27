@@ -31,7 +31,7 @@ import java.util.UUID;
 
 /**
  * Queues a project's discovery run or its nightly update by hand instead of waiting for the leader's next plan, and
- * forgets a project's list so the next discovery run builds it again. Internal and cross-workspace, so it is reachable only from inside the
+ * forgets a project's list, or a workspace's lists, so the next discovery run builds it again. Internal and cross-workspace, so it is reachable only from inside the
  * cluster: like the other {@code /v1/internal} resources it is not authenticated by {@code AuthFilter}. For the runbook.
  */
 @Path("/v1/internal/topics")
@@ -87,6 +87,17 @@ public class TopicsResource {
             @QueryParam("workspace_id") @NotBlank String workspaceId) {
         planner.resetByHand(projectId).contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)).block();
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/reset")
+    @Operation(operationId = "resetWorkspaceTopics", summary = "Forget a workspace's topic lists", description = "Resets, as the project reset does, every project of the workspace that has a saved list, topics.storage.deleteBatchSize projects per transaction. A project with a run in flight keeps its list and is listed in the answer. The workspace is opted in to topics at stage build or later.", responses = {
+            @ApiResponse(responseCode = "200", description = "The counts of lists reset and of projects skipped for a run in flight, with the skipped project ids"),
+            @ApiResponse(responseCode = "409", description = "The workspace is not opted in at stage build or later, or topics are off; nothing changed")})
+    public Response resetWorkspace(@QueryParam("workspace_id") @NotBlank String workspaceId) {
+        var reset = planner.resetWorkspaceByHand(workspaceId).block();
+        return Response.ok(Map.of("reset", reset.reset().size(), "skipped_in_flight", reset.inFlight().size(),
+                "in_flight_project_ids", reset.inFlight())).build();
     }
 
     /** Default today (UTC). Tomorrow's window ends at tomorrow's start, so it holds today's traces so far; a later

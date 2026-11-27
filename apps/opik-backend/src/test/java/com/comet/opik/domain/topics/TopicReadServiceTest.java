@@ -35,6 +35,7 @@ import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import ru.vyarus.guicey.jdbi3.tx.TxConfig;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -304,6 +305,9 @@ class TopicReadServiceTest {
                 .liveIds(List.of(topic.id()))
                 .maxExecutionSeconds(30L)
                 .maxMemoryUsage(4L * 1024 * 1024 * 1024)
+                .firstPageWindow(Duration.ofHours(1))
+                .maxSpans(1)
+                .spanGrowth(8)
                 .build());
         // No project row read: the filter needs only the live topics.
         verify(projectDAO, never()).findProjects(any(), any());

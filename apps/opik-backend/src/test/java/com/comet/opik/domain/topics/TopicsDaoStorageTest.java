@@ -545,6 +545,26 @@ class TopicsDaoStorageTest {
     }
 
     @Test
+    @DisplayName("the deleted-traces check deletes the just-inserted rows of traces with no vector left, and keeps the "
+            + "rest")
+    void deletedTracesCheckDropsRowsWithoutVectors() {
+        var workspaceId = newId().toString();
+        var projectId = newId();
+        data.seed(workspaceId, projectId, 0, BUILT);
+        var ids = TRACES.traceIds().subList(0, 4);
+        vectorsDAO.deleteByTraceIds(Set.copyOf(ids.subList(0, 2)), projectId)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
+                .block();
+        var topicId = newId();
+        var rows = insertRunRows(workspaceId, projectId, newId(), ids, List.of(topicId, topicId, topicId, topicId));
+
+        assertThat(traceTopicsDAO.deleteRowsOfDeletedTraces(rows).block()).isEqualTo(2);
+
+        assertThat(data.traceTopics(workspaceId, projectId)).containsExactlyInAnyOrderElementsOf(rows.subList(2, 4));
+    }
+
+    @Test
     @DisplayName("retention deletes the rows of traces below the cutoff, and keeps experiment-linked, newer and other "
             + "workspaces' traces")
     void retentionDeletesBelowTheCutoff() {
