@@ -868,14 +868,24 @@ class TestExportSingleProjectClosesManifest:
         assert manifest_file.exists()
 
     def test_export_single_project__close_fails__still_returns_result(self, tmp_path):
+        from opik.cli.export_manifest import ExportManifest
         from opik.cli.exports.project import export_single_project
+
+        real_close = ExportManifest.close
+
+        def close_then_fail(manifest):
+            # Release the connection so it does not leak past the test, then fail.
+            real_close(manifest)
+            raise sqlite3.OperationalError("disk I/O error")
 
         with (
             patch(f"{_MODULE}.export_traces") as mock_export,
             patch(
                 f"{_MODULE}.ExportManifest.close",
-                side_effect=sqlite3.OperationalError("disk I/O error"),
-            ),
+                autospec=True,
+                side_effect=close_then_fail,
+            ) as mock_close,
+            patch(f"{_MODULE}.LOGGER.warning") as mock_warning,
         ):
             mock_export.return_value = (3, 0, False)
             result = export_single_project(
@@ -890,3 +900,8 @@ class TestExportSingleProjectClosesManifest:
             )
 
         assert result == (1, 3, 0, False)
+        mock_close.assert_called_once()
+        mock_warning.assert_called_once()
+        assert mock_warning.call_args.args[0].startswith(
+            "Failed to close the export manifest"
+        )
