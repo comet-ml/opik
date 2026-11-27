@@ -761,7 +761,7 @@ class TopicsNightlyIntegrationTest {
         assertThat(retired(update.runId())).containsOnlyKeys(before.stream().map(Topic::id).toList())
                 .allSatisfy((topicId, reason) -> assertThat(reason).isEqualTo("low_share"));
         var cleared = row.toBuilder().savedRuns(row.savedRuns() + 1).listRunId(null).windowUntil(null)
-                .labelsComplete(false).otherVectors(null).embedModel(null).runId(update.runId())
+                .labelsComplete(false).otherVectors(null).embedModel(null).listAuthorVersion(null).runId(update.runId())
                 .runMode(TopicProject.RunMode.UPDATE).runStatus(TopicProject.RunStatus.SAVED).lastNight(today())
                 .build();
         assertThat(data.topicProject(projectId)).usingRecursiveComparison().ignoringFields(SAVED_FIELDS)
@@ -772,7 +772,9 @@ class TopicsNightlyIntegrationTest {
 
         var rediscovered = discoverByHand(workspaceId, projectId, today());
 
-        assertSavedNight(projectId, cleared.toBuilder().embedModel(row.embedModel()).build(), rediscovered,
+        assertSavedNight(projectId,
+                cleared.toBuilder().embedModel(row.embedModel()).listAuthorVersion(row.listAuthorVersion()).build(),
+                rediscovered,
                 todayStart(), today());
         assertThat(data.topics(projectId)).isNotEmpty()
                 .allSatisfy(topic -> {

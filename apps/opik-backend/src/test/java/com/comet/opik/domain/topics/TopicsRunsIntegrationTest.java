@@ -180,7 +180,7 @@ class TopicsRunsIntegrationTest {
     @DisplayName("a plan queues the discovery run of the opted-in project with minVectors in tomorrow's window; a pod "
             + "runs it, then its labelling pass; a project with a list, one under minVectors, one with no trace in "
             + "the window, one of another workspace and a deleted one get no run; the next plan queues nothing")
-    void plansAndRunsADiscovery() {
+    void plansAndRunsADiscovery(@Jit TopicTasks tasks) {
         var workspaceId = enabledWorkspace();
         var built = UUID.randomUUID();
         var withList = UUID.randomUUID();
@@ -207,7 +207,8 @@ class TopicsRunsIntegrationTest {
                 .isEqualTo(TopicProject.RunMode.LABELS));
         Awaitility.await().atMost(WAIT).untilAsserted(() -> assertProject(built, TopicProject.builder()
                 .workspaceId(workspaceId).projectId(built).savedRuns(1).listRunId(buildRun).labelsComplete(true)
-                .embedModel(TopicEmbedding.MODEL).runId(data.topicProject(built).runId())
+                .embedModel(TopicEmbedding.MODEL).listAuthorVersion(tasks.author().version())
+                .runId(data.topicProject(built).runId())
                 .runMode(TopicProject.RunMode.LABELS).runStatus(TopicProject.RunStatus.SAVED).build()));
         assertThat(data.topicProject(built).windowUntil()).isEqualTo(tomorrowStart());
         data.assertArrivalEqualsTheRun(windowDAO, algorithm, workspaceId, built, buildRun, tomorrowStart());
