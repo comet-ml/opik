@@ -51,4 +51,11 @@ public interface TopicAlgorithm {
      * @param otherVectors the known-Other prototypes of the saved list, or null when it has none
      */
     TopicLabeller labeller(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
+
+    /**
+     * A fingerprint of {@link #labeller} for the same arguments: two lists with the same fingerprint label every vector
+     * the same. The labelling pass relabels a window only when the saved list's fingerprint is not the one its labels
+     * were last completed with.
+     */
+    String labellerFingerprint(List<Topic> topics, @Nullable PrototypeVectors otherVectors);
 }

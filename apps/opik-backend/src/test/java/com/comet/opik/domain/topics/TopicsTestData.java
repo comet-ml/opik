@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -159,11 +160,15 @@ final class TopicsTestData {
 
     /**
      * What a saved discovery run leaves in MySQL for a project: its row with the run saved two hours after
-     * {@code night}, and a topic of {@code size} traces. The labels are not complete yet.
+     * {@code night} or a minute ago, whichever is earlier, and a topic of {@code size} traces. The labels are not
+     * complete yet.
      */
     void savedList(String workspaceId, UUID projectId, Instant night, int size) {
         var runId = newId();
-        var savedAt = night.plus(Duration.ofHours(2));
+        // Never in the future: a labelling pass waits topics.arrival.timeout past its list's save.
+        var later = night.plus(Duration.ofHours(2));
+        var past = Instant.now().minus(Duration.ofMinutes(1)).truncatedTo(ChronoUnit.MICROS);
+        var savedAt = later.isBefore(past) ? later : past;
         var vectors = new PrototypeVectors(List.of(unit(0)));
         template.inTransaction(WRITE, handle -> {
             var projectDAO = handle.attach(TopicProjectDAO.class);
@@ -252,22 +257,22 @@ final class TopicsTestData {
     }
 
     /**
-     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the run saved in MySQL (the
-     * project's topics and its known-Other vectors), gives every trace the run labelled the label the run wrote to
-     * {@code trace_topics}. {@code night} is the end of the run's window.
+     * What topic on arrival relies on: the bound algorithm's labeller, made from the list the project saved in MySQL
+     * (its topics and its known-Other vectors), gives every trace of the window the topic it has in
+     * {@code trace_topics}, whichever run wrote it: a labelling pass writes only the topics that change. Call it once
+     * the labels are complete. {@code night} is the end of the run's window.
      */
-    void assertArrivalEqualsTheRun(TopicWindowDAO windowDAO, TopicAlgorithm algorithm, String workspaceId,
-            UUID projectId, UUID runId, Instant night) {
+    void assertArrivalEqualsTheLabels(TopicWindowDAO windowDAO, TopicAlgorithm algorithm, String workspaceId,
+            UUID projectId, Instant night) {
         var labels = traceTopics(workspaceId, projectId).stream()
-                .filter(row -> runId.equals(row.runId()))
                 .collect(Collectors.toMap(TraceTopic::traceId, TraceTopic::topicId));
-        // Wider than the test's window: only the run's traces are compared.
+        // Wider than the test's window: every trace of the project.
         var window = windowDAO.readWindow(projectId, night.minus(Duration.ofDays(90)), night.plus(Duration.ofDays(1)),
                 100_000, 120)
                 .contextWrite(context(workspaceId))
-                .collectList().block()
-                .stream().filter(row -> labels.containsKey(row.traceId())).toList();
-        assertThat(window).hasSize(labels.size()).isNotEmpty();
+                .collectList().block();
+        assertThat(window).isNotEmpty();
+        assertThat(labels.keySet()).containsAll(window.stream().map(TopicWindowDAO.WindowRow::traceId).toList());
 
         var arrived = algorithm.labeller(topics(projectId), topicProject(projectId).otherVectors())
                 .label(window.stream().map(TopicWindowDAO.WindowRow::vector).toList());
@@ -411,6 +416,34 @@ final class TopicsTestData {
     List<List<String>> queryGuards(String queryName, String workspaceId) {
         return queryLogSettings(queryName, workspaceId, "max_threads", "max_rows_to_read", "priority",
                 "max_execution_time");
+    }
+
+    /** How many {@code queryName} queries of the workspace finished, initial queries only. */
+    long queryCount(String queryName, String workspaceId) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono
+                .from(connection.createStatement("SYSTEM FLUSH LOGS").execute())
+                .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                .then(Mono.from(connection.createStatement("""
+                        SELECT count() AS queries
+                        FROM system.query_log
+                        WHERE type = 'QueryFinish' AND is_initial_query AND log_comment LIKE :log_comment
+                        """)
+                        .bind("log_comment", queryName + ":" + workspaceId + ":%")
+                        .execute()))
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("queries", Long.class)))))
+                .block();
+    }
+
+    /** Every {@code trace_topics} row of the project, before any merge dedupes them. */
+    long traceTopicRows(String workspaceId, UUID projectId) {
+        return clickHouseTemplate.nonTransaction(connection -> Mono.from(connection.createStatement("""
+                SELECT count() AS rows FROM trace_topics WHERE workspace_id = :workspace_id AND project_id = :project_id
+                """)
+                .bind("workspace_id", workspaceId)
+                .bind("project_id", projectId.toString())
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> row.get("rows", Long.class)))))
+                .block();
     }
 
     /** The distinct values of the named settings the workspace's finished {@code queryName} queries ran with. */

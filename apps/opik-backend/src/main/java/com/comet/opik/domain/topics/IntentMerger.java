@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
+import java.util.BitSet;
 import java.util.HashMap;
 
 /**
@@ -42,6 +43,80 @@ public class IntentMerger {
                 .vectors(uniqueVectors)
                 .dimensions(dimensions)
                 .build();
+    }
+
+    /**
+     * As {@link #merge}, with no copy of the vectors: permutes {@code vectors}' rows in place so that row {@code u}
+     * holds the vector of the {@code u}-th unique text (the same values {@link #merge} copies, in the same order), and
+     * the other rows follow. The merged vectors are then {@code vectors} itself, {@code size()} rows read from its
+     * start. {@link InPlace#restore} puts every row back; until then no other code may read {@code vectors}.
+     *
+     * @param texts   per trace, in time order (earliest first), stripped and non-empty
+     * @param vectors per trace, {@code texts.length * dimensions} values
+     */
+    static InPlace mergeInPlace(@NonNull String[] texts, @NonNull float[] vectors, int dimensions) {
+        Preconditions.checkArgument(vectors.length == texts.length * dimensions,
+                "vectors must hold one row per text, texts '%s', values '%s', dimensions '%s'", texts.length,
+                vectors.length, dimensions);
+        var groups = group(texts);
+        // order[p]: the row that moves to row p. The unique texts' first traces first, then the other rows in order.
+        var order = new int[texts.length];
+        var first = new BitSet(texts.length);
+        int p = 0;
+        for (int row : groups.firstIndex()) {
+            order[p++] = row;
+            first.set(row);
+        }
+        for (int row = 0; row < texts.length; row++) {
+            if (!first.get(row)) {
+                order[p++] = row;
+            }
+        }
+        permute(vectors, order, dimensions);
+        var merged = MergedIntents.builder()
+                .texts(groups.texts())
+                .weights(groups.weights())
+                .firstIndex(groups.firstIndex())
+                .textOfTrace(groups.textOfTrace())
+                .vectors(vectors)
+                .dimensions(dimensions)
+                .build();
+        return new InPlace(merged, order);
+    }
+
+    /** {@link #mergeInPlace}'s output; {@code merged.vectors()} holds more rows than {@code merged.size()}. */
+    record InPlace(MergedIntents merged, int[] order) {
+
+        /** Puts every row of the vectors back where {@link #mergeInPlace} found it. */
+        void restore() {
+            var inverse = new int[order.length];
+            for (int p = 0; p < order.length; p++) {
+                inverse[order[p]] = p;
+            }
+            permute(merged.vectors(), inverse, merged.dimensions());
+        }
+    }
+
+    /** Row {@code p} of {@code x} becomes the old row {@code order[p]}, in place, following the permutation's cycles. */
+    private static void permute(float[] x, int[] order, int dimensions) {
+        var done = new BitSet(order.length);
+        var held = new float[dimensions];
+        for (int start = 0; start < order.length; start++) {
+            if (done.get(start) || order[start] == start) {
+                continue;
+            }
+            System.arraycopy(x, start * dimensions, held, 0, dimensions);
+            int to = start;
+            done.set(to);
+            // Each step marks a row not marked before, so the cycle ends within order.length steps.
+            for (int from = order[to]; from != start; from = order[to]) {
+                Preconditions.checkState(!done.get(from), "order must be a permutation, repeated row '%s'", from);
+                System.arraycopy(x, from * dimensions, x, to * dimensions, dimensions);
+                to = from;
+                done.set(to);
+            }
+            System.arraycopy(held, 0, x, to * dimensions, dimensions);
+        }
     }
 
     /**
