@@ -486,6 +486,22 @@ rules = [{"regex": r"\b\d{3}-\d{3}-\d{4}\b", "replace": "[PHONE]"}]
 anonymizer = create_anonymizer(rules, max_depth=5)
 ```
 
+## Dictionary Keys
+
+By default, rules are applied to values only. If personal data can appear in dictionary keys, for example a mapping from user e-mail to score, set `anonymize_dict_keys=True`:
+
+```python wordWrap
+from opik.anonymizer import create_anonymizer
+
+rules = [{"regex": r"[\w.+-]+@[\w-]+\.[\w.]+", "replace": "[EMAIL]"}]
+anonymizer = create_anonymizer(rules, anonymize_dict_keys=True)
+
+anonymizer.anonymize({"jane@example.com": 0.9, "bob@example.com": 0.4})
+# {"[EMAIL]": 0.9, "[EMAIL] (2)": 0.4}
+```
+
+Keys that redact to the same text are kept apart with a numeric suffix, so no values are lost. Broad rules also apply to ordinary key names when this is on (a rule like `\d+` turns `"level1"` into `"level***"`), so prefer specific patterns.
+
 ## Multiple Anonymizers
 
 Register multiple anonymizers that will be applied in sequence:

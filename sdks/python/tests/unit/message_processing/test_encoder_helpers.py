@@ -408,3 +408,19 @@ class TestEncodeAndAnonymize:
         # Should apply both anonymizers in order: first prefix, then suffix
         expected = {"email": "PREFIX_test@example.com_SUFFIX", "name": "John Doe"}
         assert result == expected
+
+
+def test_anonymize_encoded_obj__email_used_as_dict_key_is_redacted_when_enabled():
+    from opik.anonymizer import create_anonymizer
+
+    anonymizer_instance = create_anonymizer(
+        {"regex": r"[\w.+-]+@[\w-]+\.[\w.]+", "replace": "[EMAIL]"},
+        anonymize_dict_keys=True,
+    )
+    encoded = {"input": {"scores_by_user": {"jane.doe@example.com": 0.9}}}
+
+    result = encoder_helpers.anonymize_encoded_obj(
+        encoded, {"input"}, [anonymizer_instance], "span"
+    )
+
+    assert result == {"input": {"scores_by_user": {"[EMAIL]": 0.9}}}

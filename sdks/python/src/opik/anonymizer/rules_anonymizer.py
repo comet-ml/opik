@@ -10,14 +10,20 @@ class RulesAnonymizer(recursive_anonymizer.RecursiveAnonymizer):
     anonymize sensitive information in text.
     """
 
-    def __init__(self, anonymizer_rules: List[rules.Rule], max_depth: int = 10):
+    def __init__(
+        self,
+        anonymizer_rules: List[rules.Rule],
+        max_depth: int = 10,
+        anonymize_dict_keys: bool = False,
+    ):
         """Initialize the RulesAnonymizer with a list of rules.
 
         Args:
             anonymizer_rules: List of Rule objects to apply for anonymization.
             max_depth: Maximum recursion depth for nested data structures.
+            anonymize_dict_keys: Also apply the rules to string dictionary keys.
         """
-        super().__init__(max_depth)
+        super().__init__(max_depth, anonymize_dict_keys=anonymize_dict_keys)
         self.rules = anonymizer_rules
 
     def anonymize_text(self, data: str, **kwargs: Any) -> str:

@@ -558,3 +558,35 @@ class TestRecursiveAnonymizer:
         assert len(calls_log) == 2
         for field_name in calls_log:
             assert field_name in expected_field_names
+
+
+class TestRecursiveAnonymizerDictKeys:
+    def test_recursive_anonymizer__default_settings__dict_keys_not_anonymized(self):
+        """Applying anonymize_text to key names would rename fields, so key
+        handling is opt-in."""
+
+        class RedactEverything(RecursiveAnonymizer):
+            def anonymize_text(self, data: str, **kwargs: Any) -> str:
+                return "[REDACTED]"
+
+        result = RedactEverything().anonymize({"password": "hunter2"})
+
+        assert result == {"password": "[REDACTED]"}
+
+    def test_recursive_anonymizer__dict_keys_enabled__keys_anonymized_with_field_path(
+        self,
+    ):
+        calls: List[Dict[str, Any]] = []
+
+        class KeyAware(RecursiveAnonymizer):
+            def anonymize_text(self, data: str, **kwargs: Any) -> str:
+                calls.append({"data": data, "field_name": kwargs.get("field_name")})
+                return data.upper()
+
+        result = KeyAware(anonymize_dict_keys=True).anonymize(
+            {"user": {"k": "v"}}, field_name="input"
+        )
+
+        assert result == {"USER": {"K": "V"}}
+        assert {"data": "k", "field_name": "input.user.k"} in calls
+        assert {"data": "user", "field_name": "input.user"} in calls

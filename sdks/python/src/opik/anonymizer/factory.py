@@ -14,7 +14,9 @@ RulesType = Union[
 
 
 def create_anonymizer(
-    anonymizer_rules: RulesType, max_depth: int = 10
+    anonymizer_rules: RulesType,
+    max_depth: int = 10,
+    anonymize_dict_keys: bool = False,
 ) -> anonymizer.Anonymizer:
     """Create an anonymizer with the specified rules.
 
@@ -25,6 +27,9 @@ def create_anonymizer(
             - Callable that takes a string and returns anonymized string
             - List of any of the above for multiple rules
         max_depth: Maximum recursion depth for nested data structures.
+        anonymize_dict_keys: Also apply the rules to string dictionary keys, so
+            personal data used as a key is redacted. Off by default because broad
+            rules would also rename ordinary keys.
 
     Returns:
         An Anonymizer instance configured with the specified rules.
@@ -65,7 +70,9 @@ def create_anonymizer(
     else:
         raise ValueError(f"Unsupported rules type: {type(anonymizer_rules)}")
 
-    return rules_anonymizer.RulesAnonymizer(rule_objects, max_depth=max_depth)
+    return rules_anonymizer.RulesAnonymizer(
+        rule_objects, max_depth=max_depth, anonymize_dict_keys=anonymize_dict_keys
+    )
 
 
 def _check_dictionary_rule(rule: Dict[str, str]) -> None:
