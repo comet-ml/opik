@@ -23,8 +23,13 @@ Covers the changes introduced to handle server-side 429 throttling:
   export_single_project (had_errors propagation)
     - returns 4-tuple; had_errors=False on clean run, True when errors occurred
     - first element is 0 when no traces exported or skipped, 1 otherwise
+
+  export_single_project (manifest lifecycle)
+    - the export manifest is closed before returning, whatever the outcome
+    - no export_manifest.db-wal / -shm files are left after the export
 """
 
+import sqlite3
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -786,3 +791,117 @@ class TestExportSingleProjectReturnValues:
                 )
 
         assert result == (0, 0, 0, True)
+
+
+class TestExportSingleProjectClosesManifest:
+    """export_single_project must close its ExportManifest before returning.
+
+    A sqlite3 connection is freed only by the cyclic garbage collector, so an
+    unclosed manifest keeps export_manifest.db (and its -wal/-shm files) open
+    after the export finishes. On Windows that also locks the project directory.
+    """
+
+    @pytest.mark.parametrize(
+        "export_outcome",
+        [(3, 0, False), (2, 1, True), RuntimeError("unexpected failure")],
+        ids=["clean_run", "run_with_errors", "exception_during_export"],
+    )
+    def test_export_single_project__any_outcome__manifest_closed(
+        self, tmp_path, export_outcome
+    ):
+        from opik.cli.exports.project import export_single_project
+
+        with patch(f"{_MODULE}.export_traces") as mock_export:
+            if isinstance(export_outcome, Exception):
+                mock_export.side_effect = export_outcome
+            else:
+                mock_export.return_value = export_outcome
+            export_single_project(
+                client=MagicMock(),
+                project_name="test-proj",
+                project_dir=tmp_path / "projects",
+                filter_string=None,
+                max_results=None,
+                force=False,
+                debug=False,
+                format="json",
+            )
+
+        manifest = mock_export.call_args.kwargs["manifest"]
+        with pytest.raises(sqlite3.ProgrammingError):
+            manifest.get_format()
+
+    def test_export_single_project__export_ends__no_wal_or_shm_left(self, tmp_path):
+        from opik.cli.exports.project import export_single_project
+
+        manifest_files = []
+        side_files_during_export = []
+
+        def fake_export_traces(*args, **kwargs):
+            manifest_file = kwargs["manifest"].manifest_file
+            manifest_files.append(manifest_file)
+            side_files_during_export.extend(
+                p.name for p in manifest_file.parent.glob(manifest_file.name + "-*")
+            )
+            return (3, 0, False)
+
+        with patch(f"{_MODULE}.export_traces", side_effect=fake_export_traces):
+            export_single_project(
+                client=MagicMock(),
+                project_name="test-proj",
+                project_dir=tmp_path / "projects",
+                filter_string=None,
+                max_results=None,
+                force=False,
+                debug=False,
+                format="json",
+            )
+
+        (manifest_file,) = manifest_files
+        # The manifest runs in WAL mode, so both side files exist while it is open;
+        # closing the last connection checkpoints the WAL and deletes them.
+        assert sorted(side_files_during_export) == [
+            manifest_file.name + "-shm",
+            manifest_file.name + "-wal",
+        ]
+        assert list(manifest_file.parent.glob(manifest_file.name + "-*")) == []
+        assert manifest_file.exists()
+
+    def test_export_single_project__close_fails__still_returns_result(self, tmp_path):
+        from opik.cli.export_manifest import ExportManifest
+        from opik.cli.exports.project import export_single_project
+
+        real_close = ExportManifest.close
+
+        def close_then_fail(manifest):
+            # Release the connection so it does not leak past the test, then fail.
+            real_close(manifest)
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with (
+            patch(f"{_MODULE}.export_traces") as mock_export,
+            patch(
+                f"{_MODULE}.ExportManifest.close",
+                autospec=True,
+                side_effect=close_then_fail,
+            ) as mock_close,
+            patch(f"{_MODULE}.LOGGER.warning") as mock_warning,
+        ):
+            mock_export.return_value = (3, 0, False)
+            result = export_single_project(
+                client=MagicMock(),
+                project_name="test-proj",
+                project_dir=tmp_path / "projects",
+                filter_string=None,
+                max_results=None,
+                force=False,
+                debug=False,
+                format="json",
+            )
+
+        assert result == (1, 3, 0, False)
+        mock_close.assert_called_once()
+        mock_warning.assert_called_once()
+        assert mock_warning.call_args.args[0].startswith(
+            "Failed to close the export manifest"
+        )
