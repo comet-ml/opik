@@ -111,8 +111,6 @@ export type TraceDetailsPanelProps = {
   container?: HTMLElement | null;
   refetchInterval?: number | false;
   hideAnnotateActions?: boolean;
-  /** Opt-in: the MCP hint ships on the Logs page only. */
-  showMcpHint?: boolean;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -129,7 +127,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   container,
   refetchInterval,
   hideAnnotateActions,
-  showMcpHint,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -279,23 +276,21 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       setErrorOpenFor(expanded ? mcpHintSubject : null);
       if (!expanded) return;
 
-      // Emitted here, not from the shared error section: only this knows the
-      // hint is switched on, and the funnel must not count surfaces without it.
       const properties = {
         entity_type: mcpHintTarget.entityType,
         install_mode: mcpInstallMode,
       };
       trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
 
-      // One impression per node for as long as the panel is open. The hint
-      // stays through a collapse, and A -> B -> A is the same button coming
-      // back into view rather than a second showing of it.
-      if (!showMcpHint || shownHintsRef.current.has(mcpHintSubject)) return;
-      shownHintsRef.current.add(mcpHintSubject);
+      // The hint always follows the opened error, so A -> B -> A brings it back
+      // on A. Only the impression is counted once per node while the panel is
+      // open: coming back to A is the same button, not a second showing.
       setHintShownFor(mcpHintSubject);
+      if (shownHintsRef.current.has(mcpHintSubject)) return;
+      shownHintsRef.current.add(mcpHintSubject);
       trackEvent(OpikEvent.MCP_HINT_SHOWN, properties);
     },
-    [mcpHintSubject, mcpHintTarget.entityType, mcpInstallMode, showMcpHint],
+    [mcpHintSubject, mcpHintTarget.entityType, mcpInstallMode],
   );
 
   const spanCount = spansData?.content?.length ?? 0;
@@ -474,17 +469,13 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
-                    isErrorExpanded={showMcpHint ? isErrorOpen : undefined}
-                    onErrorExpandedChange={
-                      showMcpHint ? handleErrorExpandedChange : undefined
-                    }
+                    isErrorExpanded={isErrorOpen}
+                    onErrorExpandedChange={handleErrorExpandedChange}
                     headerSlot={
-                      showMcpHint ? (
-                        <McpHintRail
-                          isVisible={isHintVisible}
-                          target={mcpHintTarget}
-                        />
-                      ) : undefined
+                      <McpHintRail
+                        isVisible={isHintVisible}
+                        target={mcpHintTarget}
+                      />
                     }
                   />
                 )}

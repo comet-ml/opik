@@ -100,4 +100,56 @@ test.describe('Trace Explore — MCP hint on expanded errors', { tag: ['@t2-cuj'
       await expect(panel.mcpHintPopover).toBeVisible();
     });
   });
+
+  // The button follows whichever error is open: stepping away to another
+  // failing trace and back must not leave the first one without it.
+  test('the hint comes back on a trace the user returns to', { tag: ['@cap:traces.mcp-hint-on-trace-error'] }, async ({
+    project,
+    sdkClient,
+    testNamespace,
+    page,
+  }) => {
+    const traces = await test.step('Seed two failing traces', async () => {
+      const seedOne = (suffix: string) =>
+        sdkClient.python.createNestedTrace({
+          project_name: project.name,
+          name: `${testNamespace}-${suffix}`,
+          input: { question: `${suffix} question` },
+          error_info: ERROR_INFO,
+          spans: [],
+        });
+      // Sequential, so the table's row order is settled before the arrows walk it.
+      const first = await seedOne('first');
+      const second = await seedOne('second');
+      return [first, second];
+    });
+
+    const logs = new LogsPage(page);
+    const first = await test.step('Open the top row and reveal its hint', async () => {
+      await logs.goto(project.id);
+      await logs.waitForReady();
+      for (const trace of traces) {
+        await expect(logs.traceRow(trace.id)).toHaveCount(1);
+      }
+      const opened = await logs.openFirstTrace();
+      await opened.waitForFullyLoaded();
+      await opened.expandError();
+      await opened.waitForMcpHint();
+      return opened;
+    });
+
+    const second = await test.step('Reveal the hint on the adjacent trace', async () => {
+      const next = await first.goToAdjacentRow('next');
+      await next.expandError();
+      await next.waitForMcpHint();
+      return next;
+    });
+
+    await test.step('Going back and opening the first error again shows the hint', async () => {
+      const back = await second.goToAdjacentRow('previous');
+      await back.expandError();
+      await back.waitForMcpHint();
+      await expect(back.mcpHintButton).toBeVisible();
+    });
+  });
 });

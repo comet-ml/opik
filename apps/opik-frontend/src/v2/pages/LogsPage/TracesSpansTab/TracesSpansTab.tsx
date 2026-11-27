@@ -1666,7 +1666,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           open={Boolean(traceId) && !threadId}
           onClose={handleClose}
           onRowChange={handleRowChange}
-          showMcpHint
         />
       </QuickAttributeFilterProvider>
       <ThreadDetailsPanel
