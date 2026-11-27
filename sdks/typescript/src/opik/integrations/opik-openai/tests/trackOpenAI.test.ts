@@ -55,6 +55,72 @@ const drainStream = async (
   return { parent, received, requests };
 };
 
+describe("trackOpenAI request errors", () => {
+  const failures = {
+    "a rejected promise": (error: Error) => async () => {
+      throw error;
+    },
+    "a synchronous throw": (error: Error) => () => {
+      throw error;
+    },
+  };
+
+  const callFailing = async (
+    fail: (error: Error) => (...args: unknown[]) => unknown,
+    error: Error,
+    withParent: boolean
+  ) => {
+    const target = { span: vi.fn(), update: vi.fn(), end: vi.fn() };
+    const parent = { span: vi.fn(), update: vi.fn(), end: vi.fn() };
+    const client = {
+      flush: vi.fn(),
+      trace: vi.fn().mockReturnValue(target),
+    } as unknown as Opik;
+    const tracked = trackOpenAI(
+      { chat: { completions: { create: fail(error) } } },
+      withParent ? { parent: parent as never, client } : { client }
+    );
+
+    await expect(
+      Promise.resolve().then(() =>
+        tracked.chat.completions.create({
+          model: "gpt-5.5",
+          messages: [{ role: "user", content: "hi" }],
+        })
+      )
+    ).rejects.toBe(error);
+
+    return { parent, client, target: withParent ? parent : target };
+  };
+
+  describe.each(Object.entries(failures))("with %s", (_name, fail) => {
+    it("records the error on a user-provided parent without ending it", async () => {
+      const error = new Error(`boom_${crypto.randomUUID()}`);
+
+      const { parent, client } = await callFailing(fail, error, true);
+
+      expect(client.trace).not.toHaveBeenCalled();
+      expect(parent.span).toHaveBeenCalledTimes(1);
+      expect(parent.span.mock.calls[0][0].errorInfo.message).toBe(
+        error.message
+      );
+      expect(parent.end).not.toHaveBeenCalled();
+    });
+
+    it("ends the trace it created when there is no user-provided parent", async () => {
+      const error = new Error(`boom_${crypto.randomUUID()}`);
+
+      const { target } = await callFailing(fail, error, false);
+
+      expect(target.span).toHaveBeenCalledTimes(1);
+      expect(target.span.mock.calls[0][0].errorInfo.message).toBe(
+        error.message
+      );
+      expect(target.end).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
 describe("trackOpenAI streaming", () => {
   it("records parallel tool calls and the leading text in the span output", async () => {
     const text = `text_${crypto.randomUUID()}`;

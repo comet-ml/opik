@@ -20,6 +20,7 @@ import { Opik, OpikSpanType } from "opik";
 const handleError = (
   error: Error,
   rootTracer: OpikParent,
+  hasUserProvidedParent: boolean,
   observationData: ObservationData
 ): void => {
   rootTracer.span({
@@ -32,7 +33,9 @@ const handleError = (
       traceback: error.stack ?? "",
     },
   });
-  rootTracer.end();
+  if (!hasUserProvidedParent) {
+    rootTracer.end();
+  }
 };
 
 type TracingConfig = TrackOpikConfig &
@@ -137,7 +140,7 @@ const wrapMethod = <T extends GenericMethod>(
           return result;
         })
         .catch((err) => {
-          handleError(err, rootTracer, observationData);
+          handleError(err, rootTracer, hasUserProvidedParent, observationData);
           throw err;
         });
 
@@ -146,7 +149,12 @@ const wrapMethod = <T extends GenericMethod>(
 
     return res as ReturnType<T>;
   } catch (error) {
-    handleError(error as Error, rootTracer, observationData);
+    handleError(
+      error as Error,
+      rootTracer,
+      hasUserProvidedParent,
+      observationData
+    );
     throw error;
   }
 };

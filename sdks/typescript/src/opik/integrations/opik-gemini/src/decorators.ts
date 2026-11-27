@@ -136,7 +136,12 @@ export const withTracing = <T extends GenericMethod>(
             return result;
           })
           .catch((err) => {
-            handleError(err, rootTracer, observationData);
+            handleError(
+              err,
+              rootTracer,
+              hasUserProvidedParent,
+              observationData
+            );
             throw err;
           });
 
@@ -190,7 +195,12 @@ export const withTracing = <T extends GenericMethod>(
 
       return res as ReturnType<T>;
     } catch (error) {
-      handleError(error as Error, rootTracer, observationData);
+      handleError(
+        error as Error,
+        rootTracer,
+        hasUserProvidedParent,
+        observationData
+      );
       throw error;
     }
   };
@@ -300,7 +310,12 @@ function wrapAsyncIterable<T>(
         rootTracer.update({ output: aggregatedOutput, endTime: new Date() });
       }
     } catch (error) {
-      handleError(error as Error, rootTracer, initialObservationData);
+      handleError(
+        error as Error,
+        rootTracer,
+        hasUserProvidedParent,
+        initialObservationData
+      );
       throw error;
     }
   }
@@ -309,11 +324,12 @@ function wrapAsyncIterable<T>(
 }
 
 /**
- * Handle errors by creating an error span and ending the trace
+ * Handle errors by creating an error span and ending the trace we created
  */
 const handleError = (
   error: Error,
   rootTracer: OpikParent,
+  hasUserProvidedParent: boolean,
   observationData: ObservationData
 ): void => {
   rootTracer.span({
@@ -326,5 +342,7 @@ const handleError = (
       traceback: error.stack ?? "",
     },
   });
-  rootTracer.end();
+  if (!hasUserProvidedParent) {
+    rootTracer.end();
+  }
 };
