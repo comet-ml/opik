@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, {
-  PROVIDER_KEYS_REST_ENDPOINT,
+  OPENROUTER_REGION_KEY,
   PROVIDERS_KEYS_KEY,
+  PROVIDER_KEYS_REST_ENDPOINT,
 } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
@@ -55,9 +56,10 @@ const useProviderKeysCreateMutation = () => {
       });
     },
     onSettled: () => {
-      return queryClient.invalidateQueries({
-        queryKey: [PROVIDERS_KEYS_KEY],
-      });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [PROVIDERS_KEYS_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [OPENROUTER_REGION_KEY] }),
+      ]);
     },
   });
 };
