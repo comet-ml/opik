@@ -280,12 +280,14 @@ export const AUDIO_URL_REGEX = new RegExp(
   "gi",
 );
 
+// MIME parameters must stay within the same serialized JSON string.
 const DATA_PDF_REGEX = new RegExp(
-  `data:application/pdf;base64,${IMAGE_CHARS_REGEX}`,
+  `data:application/pdf(?:;[^;,=\\s"\\\\]+=[^;,\\s"\\\\]+)*;base64,${IMAGE_CHARS_REGEX}`,
   "gi",
 );
+// After the extension, keep query strings and fragments but leave prose punctuation in the text.
 const PDF_URL_REGEX =
-  /https?:\/\/[^\s/"'<>{}\\|^`?#]+\/[^\s"'<>{}\\|^`?#]*\.pdf(?=[?#\s"'<>]|$)(?:[?#][^\s"'<>{}\\|^`]*)?/gi;
+  /https?:\/\/[^\s/"'<>{}\\|^`?#]+\/[^\s"'<>{}\\|^`?#]*\.pdf(?:[?#][^\s"'<>{}\\|^`]*|(?=[.,);:!]*(?:[\s"'<>]|$)))/gi;
 
 export type ProcessedInput = {
   media: ParsedMediaData[];
@@ -650,6 +652,7 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
 
         // Skip if URL has an image extension (only check http URLs)
         if (source.startsWith("http") && hasImageExtension(source)) return;
+        if (parsePdfValue(source)) return;
 
         const url = source;
         const name = url.startsWith("data:")
@@ -715,6 +718,7 @@ const extractOpenAIAudios = (
     // Skip if URL has an image or video extension (only check http URLs)
     if (source.startsWith("http") && hasImageExtension(source)) return;
     if (source.startsWith("http") && hasVideoExtension(source)) return;
+    if (parsePdfValue(source)) return;
 
     const url = source;
     const name = url.startsWith("data:")

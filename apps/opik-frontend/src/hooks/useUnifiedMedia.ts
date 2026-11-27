@@ -122,10 +122,20 @@ const convertMediaBatch = (
   source: "inline" | "attachment",
   idPrefix: string,
   startIndex: number = 0,
-): UnifiedMediaItem[] =>
-  items.map((item, index) =>
-    createUnifiedMediaItem(item, source, idPrefix, index, startIndex + index),
-  );
+): UnifiedMediaItem[] => {
+  let pdfIndex = 0;
+  return items.map((item, index) => {
+    const placeholderIndex =
+      item.type === ATTACHMENT_TYPE.PDF ? pdfIndex++ : startIndex + index;
+    return createUnifiedMediaItem(
+      item,
+      source,
+      idPrefix,
+      index,
+      placeholderIndex,
+    );
+  });
+};
 
 /**
  * State for async media detection
