@@ -3241,10 +3241,12 @@ topics:
     oneSliceMaxTraces: ${TOPICS_VECTORS_ONE_SLICE_MAX_TRACES:-250000}
     find:
       #  Default: 30000000
-      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 1000000000
+      #  Description: Per window read. A fresh read over it is read again over the older half of its status
+      #  span, down to 1 minute; other reads fail for the tick. At most 1000000000
       maxRowsToRead: ${TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ:-30000000}
       #  Default: 1073741824 (1 GiB)
-      #  Description: Per window read; a trip fails that workspace's read for the tick. At most 8589934592 (8 GiB)
+      #  Description: Per window read. A fresh read over it is read again over the older half of its status
+      #  span, down to 1 minute; other reads fail for the tick. At most 8589934592 (8 GiB)
       maxMemoryUsage: ${TOPICS_VECTORS_FIND_MAX_MEMORY_USAGE:-1073741824}
       #  Default: 30s
       #  Description: Per window read, cut to the time left in the tick. Adds to the leader lock's lease. At most

@@ -786,6 +786,7 @@ leader pod ticks every `TOPICS_VECTORS_TICK_INTERVAL` (`1m`). Read the counters 
 | `topics.vectors.embed.failures_total` by `http_status`, `code`, `error_type` | Failed embed calls; `http_status` 0 means no response. |
 | `topics.vectors.embed.duration_seconds` by `outcome` | Wall time per embed call: `ok`, or the error code. Near `TOPICS_VECTORS_EMBED_TIMEOUT` means the embed pool is the bottleneck. |
 | `topics.vectors.read.failures_total` by `phase`, `error_type` | Failed ClickHouse reads: `find` (a workspace read), `discover` (a project discovery), `backfill` (a project read). The read runs again next tick. |
+| `topics.vectors.read.narrowed_total` by `workspace` | Fresh workspace reads over a find guard (`TOPICS_VECTORS_FIND_MAX_ROWS_TO_READ` or `..._MAX_MEMORY_USAGE`), read again over the older half of their status span, halved down to 1 minute. The tick writes that part and moves on, and the next tick reads from there. Logs WARN `Topic vectors window read over its guard, reading the statuses up to ...`. A read still over the guard at 1 minute counts in `read.failures_total`. |
 | `topics.vectors.workspaces_not_read_total` by `reason` | Workspaces a tick did not read: `budget` or `over_excluded`. |
 | `topics.vectors.discoveries_total` by `outcome` | See "Discovery runs and the vectors backfill". |
 | `topics.vectors.long_window.missed_total` | Vectors the daily pass wrote for statuses the fresh phase missed. Should stay near zero. |

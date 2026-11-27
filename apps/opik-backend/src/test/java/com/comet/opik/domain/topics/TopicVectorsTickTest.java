@@ -1,5 +1,6 @@
 package com.comet.opik.domain.topics;
 
+import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.events.ProjectsDeleted;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -728,6 +729,43 @@ class TopicVectorsTickTest {
         assertThat(countRows(workspaceId)).isZero();
 
         assertThat(tick()).isEqualTo(TickResult.written(3));
+    }
+
+    @Test
+    @DisplayName("a fresh read over its memory guard is read again over the first half of its status span: the "
+            + "watermark moves on each tick and a later tick writes the traces")
+    void freshReadOverItsGuardNarrows() {
+        var workspaceId = enabledWorkspace();
+        var projectId = ID_GENERATOR.generateId();
+        markDrained(workspaceId, projectId);
+        var traceIds = labelTraces(workspaceId, projectId, 3, 1);
+        // As a memory guard trips on a workspace with many statuses: a read whose status span is over 6 hours fails.
+        var guardedDAO = spy(vectorsDAO);
+        var spans = new ArrayList<Duration>();
+        doAnswer(invocation -> {
+            TopicVectorsFind find = invocation.getArgument(0);
+            var span = Duration.between(find.lowerBound(), find.upperBound());
+            spans.add(span);
+            return span.compareTo(Duration.ofHours(6)) > 0
+                    ? Flux.error(new RuntimeException(new ClickHouseException(241, "Memory limit exceeded", null)))
+                    : invocation.callRealMethod();
+        }).when(guardedDAO).findUnvectored(any());
+        var tick = new TopicVectorsTickService(opikConfig.getTopics(), opikConfig.getAiLabels(), workspaceService,
+                guardedDAO, taskRegistry, writer,
+                new TopicVectorDiscovery(opikConfig.getTopics(), vectorsDAO, backfillService, vectorsMetrics),
+                backfiller, vectorsMetrics, longReadRetry);
+
+        // The 24-hour read trips, then 12 hours, then 6 hours reads nothing: the statuses are newer.
+        assertThat(tick.tick(Instant.now()).block()).isEqualTo(TickResult.EMPTY);
+        assertThat(spans).hasSize(3);
+        assertThat(spans.getLast()).isLessThanOrEqualTo(Duration.ofHours(6));
+
+        var written = 0;
+        for (int i = 0; i < 5 && written == 0; i++) {
+            written = tick.tick(Instant.now()).block().written();
+        }
+        assertThat(written).isEqualTo(3);
+        assertThat(Set.copyOf(writtenTraceIds(workspaceId))).isEqualTo(Set.copyOf(traceIds));
     }
 
     @Test

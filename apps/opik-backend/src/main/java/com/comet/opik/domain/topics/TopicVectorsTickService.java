@@ -71,6 +71,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TopicVectorsTickService {
 
+    /** The shortest status span a fresh read over its guard is narrowed to; one still over it fails as before. */
+    static final Duration MIN_NARROWED_SPAN = Duration.ofMinutes(1);
+
     private final @NonNull @Config("topics") TopicsConfig config;
     private final @NonNull @Config("aiLabels") AiLabelsConfig aiLabelsConfig;
     private final @NonNull TopicWorkspaceService workspaces;
@@ -247,14 +250,13 @@ public class TopicVectorsTickService {
                 return Mono.just(Visit.notRead(workspace, NotRead.OVER_EXCLUDED, longWindow, true, steps));
             }
             long readStarted = System.nanoTime();
-            return WindowRead.read(dao,
-                    find.toBuilder().excludedProjectIds(readableWithout.get()).build(),
-                    longWindow ? vectors.getFind().getSliceSize().toJavaDuration() : null, budget,
-                    vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
-                    .flatMap(read -> !read.complete() && read.candidates().isEmpty()
+            return read(workspace, find.toBuilder().excludedProjectIds(readableWithout.get()).build(), longWindow,
+                    budget, embedTimeout)
+                    .flatMap(read -> !read.read().complete() && read.read().candidates().isEmpty()
                             // The budget ran out before the read: nothing was read, so the watermark stays.
                             ? Mono.just(Visit.notRead(workspace, NotRead.BUDGET, longWindow, false, steps))
-                            : serve(workspace, read, find, longWindow, missedBefore, budget, readStarted, steps))
+                            : serve(workspace, read.read(), read.find(), longWindow, missedBefore, budget,
+                                    readStarted, steps))
                     .onErrorResume(exception -> {
                         metrics.readFailure("find", workspace, exception);
                         log.warn("Topic vectors window read failed, reading it again next tick, workspace '{}'",
@@ -264,6 +266,42 @@ public class TopicVectorsTickService {
                                 .embedTime(Duration.ZERO).arrival(steps).build());
                     });
         });
+    }
+
+    /** A window read and the find it read, whose upper bound the watermark takes. */
+    private record FoundRead(@NonNull TopicVectorsFind find, @NonNull WindowRead read) {
+    }
+
+    /**
+     * The workspace's window read. A fresh read over a find size guard would fail the same way on every tick and keep
+     * its watermark, so it is read again as of the middle of its status span ({@link #narrowed}), halving until one fits
+     * or the span is under {@link #MIN_NARROWED_SPAN}. The watermark then moves to that bound, and the next tick reads
+     * from there. The daily pass is read in slices already and keeps its watermark, so it fails as it is.
+     */
+    private Mono<FoundRead> read(TopicVectorsMetrics.Workspace workspace, TopicVectorsFind find, boolean longWindow,
+            TickBudget budget, Duration embedTimeout) {
+        var vectors = config.getVectors();
+        return WindowRead.read(dao, find, longWindow ? vectors.getFind().getSliceSize().toJavaDuration() : null,
+                budget, vectors.getFind().getMaxExecutionTime().toJavaDuration(), embedTimeout)
+                .map(read -> new FoundRead(find, read))
+                .onErrorResume(exception -> {
+                    var narrowed = longWindow ? null : narrowed(find);
+                    if (narrowed == null || !TopicsReadErrors.isTooLarge(exception)) {
+                        return Mono.error(exception);
+                    }
+                    metrics.readNarrowed(workspace);
+                    log.warn("Topic vectors window read over its guard, reading the statuses up to '{}' instead, "
+                            + "workspace '{}'", narrowed.upperBound(), workspace.id(), exception);
+                    return read(workspace, narrowed, false, budget, embedTimeout);
+                });
+    }
+
+    /** The find as of the middle of its status span; null when that half is under {@link #MIN_NARROWED_SPAN}. */
+    static @Nullable TopicVectorsFind narrowed(@NonNull TopicVectorsFind find) {
+        var half = Duration.between(find.lowerBound(), find.upperBound()).dividedBy(2);
+        return half.compareTo(MIN_NARROWED_SPAN) < 0
+                ? null
+                : find.toBuilder().upperBound(find.lowerBound().plus(half)).asOf(true).build();
     }
 
     /**
