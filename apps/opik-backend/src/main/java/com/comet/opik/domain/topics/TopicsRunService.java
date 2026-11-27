@@ -7,6 +7,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -130,13 +131,19 @@ public class TopicsRunService {
      */
     private Clustered cluster(RunWindow window, int maxTopics) {
         try {
-            return new Clustered(window.traces(), window.stats(), algorithm.cluster(window.topicWindow(), maxTopics));
+            return Clustered.builder()
+                    .traces(window.traces())
+                    .windowStats(window.stats())
+                    .clustering(algorithm.cluster(window.topicWindow(), maxTopics))
+                    .build();
         } catch (RuntimeException exception) {
             throw TopicsRunException.withStats(exception, window.stats());
         }
     }
 
-    private record Clustered(List<WindowTrace> traces, ObjectNode windowStats, Clustering clustering) {
+    @Builder(toBuilder = true)
+    private record Clustered(@NonNull List<WindowTrace> traces, @NonNull ObjectNode windowStats,
+            @NonNull Clustering clustering) {
     }
 
     /** The list from the answer, as the rows the save writes, with the run's stats; a broken list is an invariant. */
