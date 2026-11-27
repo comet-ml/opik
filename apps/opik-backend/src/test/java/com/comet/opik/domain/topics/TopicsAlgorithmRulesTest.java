@@ -277,6 +277,44 @@ class TopicsAlgorithmRulesTest {
     }
 
     @Nested
+    @DisplayName("merge in place")
+    class MergeInPlace {
+
+        @Test
+        @DisplayName("gives the copy's merge and fit bit for bit, and the restore puts every row back")
+        void sameAsTheCopy() {
+            int d = 8;
+            var random = new SplittableRandom(7);
+            for (int round = 0; round < 20; round++) {
+                int n = 1 + random.nextInt(400);
+                // Repeats, in time order unrelated to the code point order of the texts.
+                var texts = IntStream.range(0, n).mapToObj(i -> "t" + random.nextInt(1 + n / 3)).toArray(String[]::new);
+                var vectors = new float[n * d];
+                for (int i = 0; i < vectors.length; i++) {
+                    vectors[i] = (float) random.nextDouble(-1, 1);
+                }
+                var original = vectors.clone();
+                var copied = IntentMerger.merge(texts, vectors, d);
+
+                var inPlace = IntentMerger.mergeInPlace(texts, vectors, d);
+                var merged = inPlace.merged();
+                assertThat(merged.vectors()).isSameAs(vectors);
+                assertThat(Arrays.copyOf(merged.vectors(), copied.size() * d)).isEqualTo(copied.vectors());
+                assertThat(merged.toBuilder().vectors(copied.vectors()).build()).usingRecursiveComparison()
+                        .isEqualTo(copied);
+                var weights = Arrays.stream(copied.weights()).asDoubleStream().toArray();
+                int k = 1 + random.nextInt(Math.min(copied.size(), 5));
+                assertThat(KMeans.fit(merged.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS))
+                        .usingRecursiveComparison()
+                        .isEqualTo(KMeans.fit(copied.vectors(), weights, d, k, round, MAX_ITERATIONS, RESTARTS));
+
+                inPlace.restore();
+                assertThat(vectors).isEqualTo(original);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("apply")
     class Apply {
 
@@ -446,13 +484,19 @@ class TopicsAlgorithmRulesTest {
                 int from = p > 0 && p % 5 == 0 ? p - 1 : p;
                 prototypes.add(Arrays.copyOfRange(flat, from * dimensions, (from + 1) * dimensions));
             }
+            // The assigner widens the rows to double once: on widened rows, dot2 and dot give the float dot bit for bit.
+            var wideVectors = widened(vectors);
+            var wideFlat = widened(flat);
             var cosines = new double[2];
             for (int i = 0; i < n; i++) {
                 for (int p = 0; p + 1 < count; p++) {
-                    VectorMath.dot2(vectors, i * dimensions, flat, p * dimensions, (p + 1) * dimensions, dimensions,
-                            cosines);
-                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(Double.doubleToRawLongBits(
-                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions)));
+                    VectorMath.dot2(wideVectors, i * dimensions, wideFlat, p * dimensions, (p + 1) * dimensions,
+                            dimensions, cosines);
+                    long single = Double.doubleToRawLongBits(
+                            VectorMath.dot(vectors, i * dimensions, flat, p * dimensions, dimensions));
+                    assertThat(Double.doubleToRawLongBits(cosines[0])).isEqualTo(single);
+                    assertThat(Double.doubleToRawLongBits(VectorMath.dot(wideVectors, i * dimensions, wideFlat,
+                            p * dimensions, dimensions))).isEqualTo(single);
                     assertThat(Double.doubleToRawLongBits(cosines[1])).isEqualTo(Double.doubleToRawLongBits(
                             VectorMath.dot(vectors, i * dimensions, flat, (p + 1) * dimensions, dimensions)));
                 }
@@ -475,6 +519,75 @@ class TopicsAlgorithmRulesTest {
                 expected[i] = best;
             }
             assertThat(assigner.winners(vectors)).containsExactly(expected);
+        }
+
+        @ParameterizedTest(name = "{0} groups, seed {1}")
+        @CsvSource({"30, 1", "31, 2", "50, 3", "1, 4", "2, 5"})
+        @DisplayName("from the cosine table to the group centres, the owners are the ones the vectors give, the gated "
+                + "known-Other centres left out alike")
+        void fromCosineTable(int groups, long seed) {
+            int d = TopicEmbedding.DIMENSIONS;
+            var random = new SplittableRandom(seed);
+            int n = 2_000;
+            // Unit vectors near the centres, so most traces clear minCosine and the gate has something to gate.
+            var centres = unitRows(randomRows(random, groups, d), d);
+            var vectors = new float[n * d];
+            for (int i = 0; i < n; i++) {
+                int g = random.nextInt(groups);
+                for (int t = 0; t < d; t++) {
+                    vectors[i * d + t] = centres[g * d + t] + (float) (random.nextDouble() * 0.04 - 0.02);
+                }
+            }
+            vectors = unitRows(vectors, d);
+            var topicGroups = new ArrayList<Integer>();
+            var owners = new ArrayList<Integer>();
+            var otherGroups = new ArrayList<Integer>();
+            for (int g = 0; g < groups; g++) {
+                int pick = random.nextInt(5);
+                if (pick < 3) {
+                    // Two groups per topic, as a topic's prototypes are its groups' centres.
+                    owners.add(topicGroups.size() / 2);
+                    topicGroups.add(g);
+                } else if (pick == 3) {
+                    otherGroups.add(g);
+                }
+            }
+            if (topicGroups.size() > 1) {
+                // A centre listed twice, as a topic prototype and as known Other: the gate leaves the Other one out.
+                otherGroups.add(topicGroups.getFirst());
+            }
+            var assigner = new PrototypeAssigner(
+                    topicGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), owners,
+                    otherGroups.stream().map(g -> Arrays.copyOfRange(centres, g * d, (g + 1) * d)).toList(), d, 0.75,
+                    OTHER_GATE);
+
+            var table = PrototypeAssigner.cosines(vectors, centres, groups, d);
+
+            assertThat(assigner.assign(table, groups, topicGroups.stream().mapToInt(Integer::intValue).toArray(),
+                    otherGroups.stream().mapToInt(Integer::intValue).toArray()))
+                    .containsExactly(assigner.assign(vectors));
+        }
+
+        private static float[] unitRows(float[] rows, int dimensions) {
+            var out = rows.clone();
+            for (int r = 0; r < out.length / dimensions; r++) {
+                double norm = 0;
+                for (int t = 0; t < dimensions; t++) {
+                    norm += (double) out[r * dimensions + t] * out[r * dimensions + t];
+                }
+                for (int t = 0; t < dimensions; t++) {
+                    out[r * dimensions + t] = (float) (out[r * dimensions + t] / Math.sqrt(norm));
+                }
+            }
+            return out;
+        }
+
+        private static double[] widened(float[] values) {
+            var out = new double[values.length];
+            for (int i = 0; i < values.length; i++) {
+                out[i] = values[i];
+            }
+            return out;
         }
 
         private static float[] randomRows(SplittableRandom random, int rows, int dimensions) {
