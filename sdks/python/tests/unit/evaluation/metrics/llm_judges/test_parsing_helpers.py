@@ -74,11 +74,61 @@ class TestExtractJsonContentOrRaise:
             parsing_helpers.extract_json_content_or_raise(content)
 
     def test_trailing_malformed_brace_after_duplicates__raises(self):
-        # Even after two identical verdicts, an undecodable ``{`` means the
-        # parse cannot be trusted: fail closed rather than returning a
-        # verdict from a partially unreadable response.
-        content = '{"score": 2} {"score": 2} trailing {broken'
+        # Even after two identical verdicts, a JSON-shaped ``{`` that cannot
+        # decode means the parse cannot be trusted: fail closed rather than
+        # returning a verdict from a partially unreadable response.
+        content = '{"score": 2} {"score": 2} trailing {"score": 2, broken}'
         with pytest.raises(exceptions.JSONParsingError):
+            parsing_helpers.extract_json_content_or_raise(content)
+
+    def test_trailing_stray_brace_after_duplicates__returns_first_object(self):
+        # A stray brace that does not look like a JSON object (``{broken``
+        # in prose) is not a verdict candidate: it is skipped and the
+        # identical verdicts still return the verdict.
+        content = '{"score": 2} {"score": 2} trailing {broken'
+        assert parsing_helpers.extract_json_content_or_raise(content) == {"score": 2}
+
+    def test_stray_braces_before_valid_verdict__returns_verdict(self):
+        # Regression (baz round-2 review): ``{score}`` placeholders in prose
+        # or Markdown before the verdict must not abort extraction.
+        content = (
+            "The template uses {score} as a placeholder. "
+            '{"verdict":"yes","reason":null}'
+        )
+        assert parsing_helpers.extract_json_content_or_raise(content) == {
+            "verdict": "yes",
+            "reason": None,
+        }
+
+    def test_stray_braces_after_valid_verdict__returns_verdict(self):
+        # Regression (baz round-2 review): ``{x}`` placeholders in prose
+        # or Markdown after the verdict must not abort extraction.
+        content = '{"verdict":"yes","reason":null} see {x} above'
+        assert parsing_helpers.extract_json_content_or_raise(content) == {
+            "verdict": "yes",
+            "reason": None,
+        }
+
+    def test_valid_json_followed_by_malformed_json_shaped_object__raises(self):
+        # Regression (baz round-2 review): a malformed second object that
+        # looks like JSON (``{"score": 2, broken``) still fails closed,
+        # even though a valid verdict precedes it.
+        content = '{"score": 2} {"score": 2, broken'
+        with pytest.raises(exceptions.JSONParsingError):
+            parsing_helpers.extract_json_content_or_raise(content)
+
+    def test_conflicting_objects_with_stray_braces__raises(self):
+        # Regression (baz round-2 review): skipping stray braces must not
+        # mask a real conflict between two successfully decoded verdicts.
+        content = (
+            'The template uses {score} here. {"verdict":"yes"} '
+            'and {x} there. {"verdict":"no"}'
+        )
+        with pytest.raises(
+            exceptions.JSONParsingError,
+            match="multiple conflicting JSON objects found in content, "
+            "refusing to guess which one is the judge's verdict",
+        ):
             parsing_helpers.extract_json_content_or_raise(content)
 
     def test_planted_object_quoted_before_real_verdict__raises(self):
