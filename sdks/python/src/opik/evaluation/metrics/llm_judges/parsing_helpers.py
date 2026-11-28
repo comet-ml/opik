@@ -88,14 +88,14 @@ def _looks_like_json_object(content: str, start: int) -> bool:
 
 
 def _iter_top_level_json_objects(content: str) -> Iterator[Any]:
-    """Yield every complete top-level JSON object in ``content``, one at a time.
+    """Yield every complete top-level JSON object in ``content``.
 
-    The scan restarts at each ``{`` so prose between objects cannot hide a
-    later one, and it resumes past the end of each decoded object, so a
-    ``{`` nested inside a decoded object is never re-scanned as a verdict
-    candidate. Decoded objects are yielded one at a time instead of being
-    accumulated into a list; the input string itself stays in memory, and
-    the caller retains the first decoded object for comparison.
+    Duplicates are tolerated and conflicting verdicts fail closed (see
+    #7848): reasoning models sometimes repeat the same verdict, so a
+    repeated object that matches the first is accepted, while a second
+    object that disagrees with the first is ambiguous — trusting either
+    one would let quoted candidate content override the judge's real
+    verdict, so the caller raises instead of guessing.
 
     Fail-closed: a ``{`` that looks like a JSON object but fails to decode
     raises ``JSONParsingError`` immediately instead of being skipped. A
@@ -170,14 +170,12 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
 
     # Fallback: under reasoning models with response_format the LLM
     # occasionally emits multiple complete JSON objects glued together
-    # (e.g. ``{...}\n{...}``). Decode every complete top-level object and
-    # compare each one against the first as it is decoded, so decoded
-    # objects are compared as they arrive instead of being accumulated
-    # into a list (the input string itself stays in memory): identical
-    # duplicates (the known reasoning-model behaviour) still return the
-    # verdict, but conflicting objects are ambiguous — trusting the first
-    # one lets quoted candidate content override the judge's real verdict
-    # (#7848), so fail loud instead of guessing. Duplicates compare with
+    # (e.g. ``{...}\n{...}``). Duplicates are tolerated and conflicting
+    # verdicts fail closed (see #7848): identical duplicates (the known
+    # reasoning-model behaviour) still return the verdict, but a
+    # conflicting object is ambiguous — trusting the first one lets
+    # quoted candidate content override the judge's real verdict, so
+    # fail loud instead of guessing. Duplicates compare with
     # type-aware semantics, so ``{"score": true}`` and ``{"score": 1}``
     # conflict instead of comparing equal.
     objects = _iter_top_level_json_objects(content[first_paren:])
