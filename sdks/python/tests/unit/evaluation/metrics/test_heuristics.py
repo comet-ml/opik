@@ -431,6 +431,22 @@ def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
         metric_cls(n_grams=n_grams, track=False)
 
 
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize(
+    "weights",
+    [
+        [float("nan"), 0.0, 0.0, 0.0],
+        [float("inf"), -float("inf"), 1.0, 1.0],
+        [0.25, 0.25, 0.25, float("nan")],
+    ],
+)
+def test_bleu__non_finite_weights__raises_value_error(metric_cls, weights):
+    # sum() of weights containing NaN is NaN, and NaN comparisons are always
+    # false, so the sum-to-1.0 check used to pass and yielded NaN scores.
+    with pytest.raises(ValueError, match="Weights must be finite"):
+        metric_cls(n_grams=4, weights=weights, track=False)
+
+
 @pytest.mark.parametrize(
     "candidate,reference,method",
     [
