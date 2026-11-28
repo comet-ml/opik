@@ -214,16 +214,9 @@ class TestRulesAnonymizer:
 
         result = anonymizer.anonymize(data)
 
-        # At max_depth=2, level3 should not be processed
-        expected = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "phone": "123-456-7890"  # Should remain unchanged
-                    }
-                }
-            }
-        }
+        # At max_depth=2 the remaining subtree is replaced, so the phone is
+        # never stored raw.
+        expected = {"level1": {"level2": "[max depth reached]"}}
         assert result == expected
 
     def test_anonymize__max_depth_exact_limit(self):

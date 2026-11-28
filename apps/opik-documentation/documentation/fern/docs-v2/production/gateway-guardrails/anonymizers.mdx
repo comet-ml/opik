@@ -486,6 +486,8 @@ rules = [{"regex": r"\b\d{3}-\d{3}-\d{4}\b", "replace": "[PHONE]"}]
 anonymizer = create_anonymizer(rules, max_depth=5)
 ```
 
+Data at or beyond `max_depth` is replaced with `[max depth reached]` and a warning is logged; it is never sent to Opik raw. The SDK's own encoding path uses a higher internal limit because it has already resolved cycles, so `max_depth` mainly protects direct `anonymize()` calls on your own data structures.
+
 ## Multiple Anonymizers
 
 Register multiple anonymizers that will be applied in sequence:

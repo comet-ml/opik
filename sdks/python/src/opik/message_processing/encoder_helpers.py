@@ -3,7 +3,13 @@ from typing import Dict, Any, Set, List, Literal
 import opik.hooks
 
 from .. import jsonable_encoder
-from ..anonymizer import anonymizer
+from ..anonymizer import anonymizer, recursive_anonymizer
+
+# ``encode()`` has already resolved cycles, so the SDK-internal path can
+# allow payloads far deeper than the conservative default used for direct
+# ``anonymize()`` calls. At this cap the anonymizer still replaces the
+# remaining subtree with a placeholder rather than storing it raw.
+ENCODER_ANONYMIZER_MAX_DEPTH = 128
 
 
 def encode_and_anonymize(
@@ -70,10 +76,16 @@ def anonymize_encoded_obj(
         for field_name in fields_to_anonymize:
             if field_name in obj:
                 for anonymizer_instance in anonymizers:
+                    anonymize_kwargs: Dict[str, Any] = {
+                        "field_name": field_name,
+                        "object_type": object_type,
+                    }
+                    if isinstance(
+                        anonymizer_instance, recursive_anonymizer.RecursiveAnonymizer
+                    ):
+                        anonymize_kwargs["max_depth"] = ENCODER_ANONYMIZER_MAX_DEPTH
                     obj[field_name] = anonymizer_instance.anonymize(
-                        obj[field_name],
-                        field_name=field_name,
-                        object_type=object_type,
+                        obj[field_name], **anonymize_kwargs
                     )
 
     return obj

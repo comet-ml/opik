@@ -1,7 +1,12 @@
 import abc
+import logging
 from typing import Any, Optional
 
 from . import anonymizer
+
+logger = logging.getLogger(__name__)
+
+MAX_DEPTH_PLACEHOLDER = "[max depth reached]"
 
 
 class RecursiveAnonymizer(anonymizer.Anonymizer):
@@ -23,9 +28,18 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         self.max_depth = max_depth
 
     def anonymize(
-        self, data: anonymizer.AnonymizerDataType, **kwargs: Any
+        self,
+        data: anonymizer.AnonymizerDataType,
+        max_depth: Optional[int] = None,
+        **kwargs: Any,
     ) -> anonymizer.AnonymizerDataType:
-        return self._recursive_anonymize(data, **kwargs)
+        """Anonymize ``data``, optionally overriding the configured depth cap.
+
+        The per-call override exists for the SDK's own encoding path: it has
+        already resolved cycles, so it can allow payloads far deeper than the
+        conservative default meant for direct calls.
+        """
+        return self._recursive_anonymize(data, max_depth=max_depth, **kwargs)
 
     @abc.abstractmethod
     def anonymize_text(self, data: str, **kwargs: Any) -> str:
@@ -36,10 +50,21 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         data: anonymizer.AnonymizerDataType,
         depth: int = 0,
         field_name: Optional[str] = None,
+        max_depth: Optional[int] = None,
         **kwargs: Any,
     ) -> anonymizer.AnonymizerDataType:
-        if depth >= self.max_depth:
-            return data
+        effective_max_depth = self.max_depth if max_depth is None else max_depth
+        if depth >= effective_max_depth:
+            # Never return the raw subtree here: it may contain PII, and this
+            # method's contract is that only anonymized data reaches Opik.
+            logger.warning(
+                "Anonymizer reached max_depth=%d; replacing the remaining "
+                "subtree with %r so it is not stored raw. Raise max_depth if "
+                "this payload is legitimate.",
+                effective_max_depth,
+                MAX_DEPTH_PLACEHOLDER,
+            )
+            return MAX_DEPTH_PLACEHOLDER
 
         if field_name is None:
             field_name = ""
@@ -49,14 +74,22 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         elif isinstance(data, dict):
             return {
                 key: self._recursive_anonymize(
-                    value, depth + 1, field_name=f"{field_name}.{key}", **kwargs
+                    value,
+                    depth + 1,
+                    field_name=f"{field_name}.{key}",
+                    max_depth=effective_max_depth,
+                    **kwargs,
                 )
                 for key, value in data.items()
             }
         elif isinstance(data, list):
             return [
                 self._recursive_anonymize(
-                    item, depth + 1, field_name=f"{field_name}.{i}", **kwargs
+                    item,
+                    depth + 1,
+                    field_name=f"{field_name}.{i}",
+                    max_depth=effective_max_depth,
+                    **kwargs,
                 )
                 for i, item in enumerate(data)
             ]
