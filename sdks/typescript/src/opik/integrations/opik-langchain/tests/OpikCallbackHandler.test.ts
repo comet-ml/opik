@@ -3,6 +3,8 @@ import { OpikCallbackHandler } from "../src/OpikCallbackHandler";
 import type { Opik, Trace, Span } from "opik";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { ChatGeneration } from "@langchain/core/outputs";
+import { RunnableLambda } from "@langchain/core/runnables";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 
 // Mock the opik module
 vi.mock("opik", () => ({
@@ -372,6 +374,97 @@ describe("OpikCallbackHandler", () => {
           usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
         })
       );
+    });
+  });
+
+  describe("concurrent root runs", () => {
+    const chain = {
+      lc: 1 as const,
+      type: "not_implemented" as const,
+      id: ["langchain", "chains", "TestChain"],
+    };
+
+    const createdTraces = () =>
+      (mockOpikClient.trace as ReturnType<typeof vi.fn>).mock.results.map(
+        (result) => result.value as Trace
+      );
+
+    beforeEach(() => {
+      handler = new OpikCallbackHandler({ client: mockOpikClient });
+      (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockImplementation(
+        () => createMockTrace()
+      );
+    });
+
+    it("should end each root run's trace when they overlap", async () => {
+      await handler.handleChainStart(chain, { query: "a" }, "run-a");
+      await handler.handleChainStart(chain, { query: "b" }, "run-b");
+      await handler.handleChainEnd({ answer: "a" }, "run-a");
+      await handler.handleChainEnd({ answer: "b" }, "run-b");
+
+      const [traceA, traceB] = createdTraces();
+      expect(traceA.update).toHaveBeenCalledWith({
+        output: { answer: { value: "a" } },
+        errorInfo: undefined,
+        endTime: expect.any(Date),
+      });
+      expect(traceB.update).toHaveBeenCalledWith({
+        output: { answer: { value: "b" } },
+        errorInfo: undefined,
+        endTime: expect.any(Date),
+      });
+    });
+
+    it("should keep the runs of a batch in separate, ended traces", async () => {
+      const inner = RunnableLambda.from(
+        async ({ id, delay }: { id: string; delay: number }) => {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return `inner ${id}`;
+        }
+      );
+      const outer = RunnableLambda.from(
+        async (input: { id: string; delay: number }, config) =>
+          `outer ${await inner.invoke(input, config)}`
+      );
+
+      await outer.batch(
+        [
+          { id: "a", delay: 20 },
+          { id: "b", delay: 1 },
+        ],
+        { callbacks: [handler] }
+      );
+      await awaitAllCallbacks();
+
+      const traces = createdTraces();
+      expect(traces).toHaveLength(2);
+
+      const traceOutputs = traces.map(
+        (trace) =>
+          (trace.update as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.output
+      );
+      expect(traceOutputs).toEqual(
+        expect.arrayContaining([
+          { output: { value: "outer inner a" } },
+          { output: { value: "outer inner b" } },
+        ])
+      );
+
+      for (const trace of traces) {
+        expect(trace.update).toHaveBeenCalledWith(
+          expect.objectContaining({ endTime: expect.any(Date) })
+        );
+        const outerSpan = (trace.span as ReturnType<typeof vi.fn>).mock
+          .results[0].value as Span;
+        const innerSpan = (outerSpan.span as ReturnType<typeof vi.fn>).mock
+          .results[0].value as Span;
+        expect(outerSpan.update).toHaveBeenCalledWith(
+          expect.objectContaining({ endTime: expect.any(Date) })
+        );
+        expect(innerSpan.update).toHaveBeenCalledWith(
+          expect.objectContaining({ endTime: expect.any(Date) })
+        );
+      }
     });
   });
 

@@ -68,9 +68,11 @@ export class OpikCallbackHandler
 
   private options: OpikCallbackHandlerOptions;
   private client: Opik;
-  private rootTraceId?: string;
   private tracerMap: Map<string, Trace | Span> = new Map();
   private rootTraces: Map<string, Trace> = new Map();
+  // Root run id of every run in tracerMap, so one handler can trace several
+  // root runs at once (batch, parallel invokes) and clean up only its own.
+  private rootRunIds: Map<string, string> = new Map();
 
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
@@ -103,7 +105,7 @@ export class OpikCallbackHandler
     const provider = metadata?.ls_provider;
     const model = metadata?.ls_model_name;
 
-    if (!parentRunId && runId === this.rootTraceId) {
+    if (!parentRunId && this.rootTraces.has(runId)) {
       return;
     }
 
@@ -121,7 +123,6 @@ export class OpikCallbackHandler
     }
 
     if (!parentRunId) {
-      this.rootTraceId = runId;
       const trace = this.client.trace({
         name,
         input,
@@ -143,13 +144,15 @@ export class OpikCallbackHandler
       });
 
       this.tracerMap.set(runId, span);
+      this.rootRunIds.set(runId, runId);
 
       return;
     }
 
     const parentTracer = this.tracerMap.get(parentRunId);
+    const rootRunId = this.rootRunIds.get(parentRunId);
 
-    if (!parentTracer) {
+    if (!parentTracer || !rootRunId) {
       logger.info(`Parent ${parentRunId} not found`);
       return;
     }
@@ -165,6 +168,7 @@ export class OpikCallbackHandler
     });
 
     this.tracerMap.set(runId, span);
+    this.rootRunIds.set(runId, rootRunId);
   }
 
   private endTracing({
@@ -202,18 +206,20 @@ export class OpikCallbackHandler
       endTime: new Date(),
     });
 
-    if (runId === this.rootTraceId) {
-      const rootTrace = this.rootTraces.get(this.rootTraceId);
-      if (rootTrace) {
-        rootTrace.update({
-          output,
-          errorInfo,
-          endTime: new Date(),
-        });
+    const rootTrace = this.rootTraces.get(runId);
+    if (rootTrace) {
+      rootTrace.update({
+        output,
+        errorInfo,
+        endTime: new Date(),
+      });
+      this.rootTraces.delete(runId);
+      for (const [id, rootRunId] of this.rootRunIds) {
+        if (rootRunId === runId) {
+          this.rootRunIds.delete(id);
+          this.tracerMap.delete(id);
+        }
       }
-      this.rootTraceId = undefined;
-      this.tracerMap.clear();
-      this.rootTraces.clear();
     }
   }
 
