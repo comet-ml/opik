@@ -299,13 +299,45 @@ class TestRecursiveAnonymizer:
 
         # Verify the results
         assert result["level1_text"] == "[ANON:depth 1 - should be processed]"
-        assert (
-            result["level1"]["level2_text"] == "depth 2 - should be processed"
-        )  # Unchanged due to depth limit
-        assert (
-            result["level1"]["level2"]["level3_text"]
-            == "depth 3 - should NOT be processed"
-        )  # Unchanged
+        # Once the cap is reached, the rest of the subtree is replaced rather
+        # than returned raw.
+        assert result["level1"]["level2_text"] == "[max depth reached]"
+        assert result["level1"]["level2"] == "[max depth reached]"
+
+    def test_recursive_anonymizer__max_depth_override__reaches_deeper(self):
+        class TrackingAnonymizer(RecursiveAnonymizer):
+            def __init__(self):
+                super().__init__(max_depth=2)
+
+            def anonymize_text(self, data: str, **kwargs: Any) -> str:
+                return f"[ANON:{data}]"
+
+        anonymizer = TrackingAnonymizer()
+        deeply_nested = {"level1": {"level2": {"level3_text": "deep value"}}}
+
+        # The per-call override exists for the SDK encoding path.
+        result = anonymizer.anonymize(deeply_nested, max_depth=10)
+
+        assert result["level1"]["level2"]["level3_text"] == "[ANON:deep value]"
+
+    def test_recursive_anonymizer__max_depth_reached__warns(self, caplog):
+        import logging
+
+        class TrackingAnonymizer(RecursiveAnonymizer):
+            def __init__(self):
+                super().__init__(max_depth=1)
+
+            def anonymize_text(self, data: str, **kwargs: Any) -> str:
+                return data
+
+        anonymizer = TrackingAnonymizer()
+        with caplog.at_level(
+            logging.WARNING, logger="opik.anonymizer.recursive_anonymizer"
+        ):
+            result = anonymizer.anonymize({"nested": {"secret": "value"}})
+
+        assert result["nested"] == "[max depth reached]"
+        assert any("max_depth" in record.message for record in caplog.records)
 
     def test_recursive_anonymizer__non_string_types__preserves_unchanged(self):
         """Test that non-string types are preserved without calling anonymize_text."""
@@ -524,11 +556,8 @@ class TestRecursiveAnonymizer:
 
         # With max_depth=3, strings at depth 1, 2, 3 should be processed, but depth 4+ should not
 
-        # Verify the structure - strings beyond max_depth should remain unchanged
-        assert (
-            "depth 4 - should NOT be processed"
-            in result["level1"]["level2"]["level3"]["text_at_level4"]
-        )
+        # Verify the structure - data beyond max_depth is redacted, not kept raw
+        assert result["level1"]["level2"]["level3"] == "[max depth reached]"
 
         # The strings within max_depth should be processed
         # With max_depth=3, only strings at depth 1 and 2 get processed

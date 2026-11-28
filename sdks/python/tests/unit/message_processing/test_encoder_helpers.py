@@ -172,6 +172,35 @@ class TestEncodeAndAnonymize:
         }
         assert result == expected
 
+    def test_anonymize_encoded_obj__deep_payload_uses_internal_depth_cap(self):
+        """The SDK encoding path allows deeper payloads than the public default."""
+        from opik.anonymizer import create_anonymizer
+
+        anonymizer = create_anonymizer(
+            [
+                {
+                    "regex": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+                    "replace": "[EMAIL]",
+                }
+            ]
+        )  # default max_depth=10
+
+        value = "jane.doe@example.com"
+        for index in range(12):
+            value = {f"level{index}": value}
+
+        result = encoder_helpers.anonymize_encoded_obj(
+            obj={"input": value},
+            anonymizers=[anonymizer],
+            fields_to_anonymize={"input"},
+            object_type="span",
+        )
+
+        leaf = result["input"]
+        while isinstance(leaf, dict):
+            leaf = next(iter(leaf.values()))
+        assert leaf == "[EMAIL]"
+
     def test_anonymize_encoded_obj__nested_dict_in_encoded_result(self):
         """Test that only top-level fields are anonymized in nested structures."""
         obj = {
