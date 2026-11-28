@@ -1,3 +1,4 @@
+import math
 import warnings
 from contextlib import contextmanager
 from typing import Any, Iterator, List, Optional, Tuple, Union
@@ -78,6 +79,10 @@ class BaseBLEU(base_metric.BaseMetric):
                 raise ValueError(
                     f"Length of weights ({len(weights)}) != n_grams ({n_grams})."
                 )
+            # NaN and infinite weights pass the sum check because comparisons
+            # with NaN are always false, so reject non-finite values first.
+            if not all(math.isfinite(weight) for weight in weights):
+                raise ValueError("Weights must be finite numbers.")
             if abs(sum(weights) - 1.0) > 1e-6:
                 raise ValueError("Weights must sum to 1.0")
             self.weights = weights
